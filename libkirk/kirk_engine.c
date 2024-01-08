@@ -376,8 +376,8 @@ int kirk_CMD6(u8* outbuff, u8* inbuff, int size)
   AES_set_key(&aesKey, userkey, 128);
   AES_encrypt(&aesKey, keyseed,key);
   AES_set_key(&aesKey, key,128);
-  
-  AES_cbc_encrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_HEADER), outbuff+sizeof(KIRK_AES128CBC_HEADER), size);
+  outbuff[0] = 5;
+  AES_cbc_encrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_USER_HEADER), outbuff+sizeof(KIRK_AES128CBC_USER_HEADER)+0x10, size);
   
   return KIRK_OPERATION_SUCCESS;
 }
@@ -447,7 +447,7 @@ int kirk_CMD9(u8* outbuff, u8* inbuff, int size)
 
   //Set the key
   AES_set_key(&aesKey, key, 128);
-  AES_cbc_decrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_HEADER), outbuff, size);
+  AES_cbc_decrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_USER_HEADER), outbuff, size);
   
   return KIRK_OPERATION_SUCCESS;
 }

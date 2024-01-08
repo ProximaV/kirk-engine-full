@@ -1,4 +1,7 @@
 /*
+
+  Proxima presents a greatly refactored and nearly complete of what...
+  
   Draan proudly presents:
   
   With huge help from community:
@@ -195,12 +198,7 @@ static u8 Py1[20] = {0x04, 0x9D, 0xF1, 0xA0, 0x75, 0xC0, 0xE0, 0x4F, 0xB3, 0x44,
 /* ------------------------- KEY VAULT END ------------------------- */
 
 /* ------------------------- INTERNAL STUFF ------------------------- */
-typedef struct blah
-{
-  u8 fuseid[8]; //0
-  u8 mesh[0x40];  //0x8
-} kirk16_data; //0x48
- 
+
 typedef struct header_keys
 {
   u8 AES[16];
@@ -213,6 +211,7 @@ u32 g_fuse94;
 
 AES_ctx aes_kirk1; //global
 u8 PRNG_DATA[0x14];
+u8 g_mesh[0x40];
 
 char is_kirk_initialized; //"init" emulation
 
@@ -329,6 +328,60 @@ int kirk_CMD4(u8* outbuff, u8* inbuff, int size)
   
   return KIRK_OPERATION_SUCCESS;
 }
+int kirk_CMD5(u8* outbuff, u8* inbuff, int size)
+{
+  KIRK_AES128CBC_HEADER *header = (KIRK_AES128CBC_HEADER*)inbuff;
+  u8 key[0x10];
+  AES_ctx aesKey;
+  
+  if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+  if(header->mode != KIRK_MODE_ENCRYPT_CBC) return KIRK_INVALID_MODE;
+  if(header->keyseed != 0x100) return KIRK_INVALID_MODE;
+  if(header->data_size == 0) return KIRK_DATA_SIZE_ZERO;
+  
+  generate_key_from_mesh(key,1);
+  
+  //Set the key
+  AES_set_key(&aesKey, key, 128);
+  AES_cbc_encrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_HEADER), outbuff+sizeof(KIRK_AES128CBC_HEADER), size);
+  
+  return KIRK_OPERATION_SUCCESS;
+}
+/*
+1. encrypt mesh 0 with mesh 2, twice (param 2)
+2. decrypt user key with result of 1
+3. encrypt result of 2 with user key
+4. use key from 3 in enc/dec operation as requested by kirk6/9
+*/
+
+int kirk_CMD6(u8* outbuff, u8* inbuff, int size)
+{
+  KIRK_AES128CBC_USER_HEADER *header = (KIRK_AES128CBC_USER_HEADER*)inbuff;
+  u8 key[0x10];
+  u8 keyseed[0x10];
+  u8 userkey[0x10];
+  
+  AES_ctx aesKey;
+  
+  if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+  if(header->mode != KIRK_MODE_ENCRYPT_CBC) return KIRK_INVALID_MODE;
+  if(header->keyseed != 0x200) return KIRK_INVALID_MODE;
+  if(header->data_size == 0) return KIRK_DATA_SIZE_ZERO;
+  
+  generate_key_from_mesh(key,2);
+  memcpy(userkey, header->userkey, 0x10);
+  //Set the key
+  AES_set_key(&aesKey, key, 128);
+  AES_decrypt(&aesKey, userkey, keyseed);
+  AES_set_key(&aesKey, userkey, 128);
+  AES_encrypt(&aesKey, keyseed,key);
+  AES_set_key(&aesKey, key,128);
+  
+  AES_cbc_encrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_HEADER), outbuff+sizeof(KIRK_AES128CBC_HEADER), size);
+  
+  return KIRK_OPERATION_SUCCESS;
+}
+
 
 int kirk_CMD7(u8* outbuff, u8* inbuff, int size)
 {
@@ -349,6 +402,56 @@ int kirk_CMD7(u8* outbuff, u8* inbuff, int size)
   
   return KIRK_OPERATION_SUCCESS;
 }
+
+int kirk_CMD8(u8* outbuff, u8* inbuff, int size)
+{
+  KIRK_AES128CBC_HEADER *header = (KIRK_AES128CBC_HEADER*)inbuff;
+  u8 key[0x10];
+  AES_ctx aesKey;
+  
+  if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+  if(header->mode != KIRK_MODE_DECRYPT_CBC) return KIRK_INVALID_MODE;
+  if(header->keyseed != 0x100) return KIRK_INVALID_MODE;
+  if(header->data_size == 0) return KIRK_DATA_SIZE_ZERO;
+  
+  generate_key_from_mesh(key,1);
+
+  //Set the key
+  AES_set_key(&aesKey, key, 128);
+  AES_cbc_decrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_HEADER), outbuff, size);
+  
+  return KIRK_OPERATION_SUCCESS;
+}
+
+int kirk_CMD9(u8* outbuff, u8* inbuff, int size)
+{
+  KIRK_AES128CBC_USER_HEADER *header = (KIRK_AES128CBC_USER_HEADER*)inbuff;
+  u8 key[0x10];
+  u8 keyseed[0x10];
+  u8 userkey[0x10];
+  
+  AES_ctx aesKey;
+  
+  if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+  if(header->mode != KIRK_MODE_DECRYPT_CBC) return KIRK_INVALID_MODE;
+  if(header->keyseed != 0x200) return KIRK_INVALID_MODE;
+  if(header->data_size == 0) return KIRK_DATA_SIZE_ZERO;
+  
+  generate_key_from_mesh(key,2);
+  memcpy(userkey, header->userkey, 0x10);
+  //Set the key
+  AES_set_key(&aesKey, key, 128);
+  AES_decrypt(&aesKey, userkey, keyseed);
+  AES_set_key(&aesKey, userkey, 128);
+  AES_encrypt(&aesKey, keyseed,key);
+
+  //Set the key
+  AES_set_key(&aesKey, key, 128);
+  AES_cbc_decrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_HEADER), outbuff, size);
+  
+  return KIRK_OPERATION_SUCCESS;
+}
+
 
 int kirk_CMD10(u8* inbuff, int insize)
 {
@@ -472,42 +575,77 @@ int kirk_CMD14(u8 * outbuff, int outsize) {
   return KIRK_OPERATION_SUCCESS;
 }
 
+void generate_key_from_mesh(u8 * key, int param)
+{
+    u8 genkey[0x10];
+    AES_ctx aes_ctx;
+    int i;
+    
+    int rounds = (param >> 1) +1;
+    memcpy(genkey,&g_mesh[param&1 * 0x10], 0x10);
+
+    AES_set_key(&aes_ctx, &g_mesh[0x20], 128);
+    for (i = 0; i < rounds; i++)
+    {
+        /* encrypt the data */
+        AES_encrypt(&aes_ctx, genkey, genkey);
+    }
+    memcpy(key,genkey,0x10);
+    return; 
+}
+
 void decrypt_kirk16_private(u8 *dA_out, u8 *dA_enc)
 {
-  int i, k;
-  kirk16_data keydata;
-  u8 subkey_1[0x10], subkey_2[0x10];
-  rijndael_ctx aes_ctx;
 
-  keydata.fuseid[7] = g_fuse90 &0xFF;
-  keydata.fuseid[6] = (g_fuse90>>8) &0xFF;
-  keydata.fuseid[5] = (g_fuse90>>16) &0xFF;
-  keydata.fuseid[4] = (g_fuse90>>24) &0xFF; 
-  keydata.fuseid[3] = g_fuse94 &0xFF;
-  keydata.fuseid[2] = (g_fuse94>>8) &0xFF;
-  keydata.fuseid[1] = (g_fuse94>>16) &0xFF;
-  keydata.fuseid[0] = (g_fuse94>>24) &0xFF;
+  u8 genkey[0x10];
+  AES_ctx aes_ctx;
+
+  /* set the key to the mesh */
+  generate_key_from_mesh(genkey,2);
  
+  /* set the key to that mesh shit */
+  AES_set_key(&aes_ctx, genkey, 128);
+ 
+  /* cbc decrypt the dA */
+  AES_cbc_decrypt(&aes_ctx, dA_enc, dA_out, 0x20);
+}
+
+void init_mesh()
+{
+  u8 fuseid[8];
+  int i, k;
+  u8 subkey_1[0x10], subkey_2[0x10];
+  AES_ctx aes_ctx;
+  memset(g_mesh,0,0x40);
+  
+  fuseid[7] = g_fuse90 &0xFF;
+  fuseid[6] = (g_fuse90>>8) &0xFF;
+  fuseid[5] = (g_fuse90>>16) &0xFF;
+  fuseid[4] = (g_fuse90>>24) &0xFF; 
+  fuseid[3] = g_fuse94 &0xFF;
+  fuseid[2] = (g_fuse94>>8) &0xFF;
+  fuseid[1] = (g_fuse94>>16) &0xFF;
+  fuseid[0] = (g_fuse94>>24) &0xFF;
   /* set encryption key */
-  rijndael_set_key(&aes_ctx, kirk16_key, 128);
+  AES_set_key(&aes_ctx, kirk16_key, 128);  
  
   /* set the subkeys */
   for (i = 0; i < 0x10; i++)
   {
     /* set to the fuseid */
-    subkey_2[i] = subkey_1[i] = keydata.fuseid[i % 8];
+    subkey_2[i] = subkey_1[i] = fuseid[i % 8];
   }
  
   /* do aes crypto */
   for (i = 0; i < 3; i++)
   {
     /* encrypt + decrypt */
-    rijndael_encrypt(&aes_ctx, subkey_1, subkey_1);
-    rijndael_decrypt(&aes_ctx, subkey_2, subkey_2);
+    AES_encrypt(&aes_ctx, subkey_1, subkey_1);
+    AES_decrypt(&aes_ctx, subkey_2, subkey_2);
   }
  
   /* set new key */
-  rijndael_set_key(&aes_ctx, subkey_1, 128);
+  AES_set_key(&aes_ctx, subkey_1, 128);
  
   /* now lets make the key mesh */
   for (i = 0; i < 3; i++)
@@ -516,97 +654,29 @@ void decrypt_kirk16_private(u8 *dA_out, u8 *dA_enc)
     for (k = 0; k < 3; k++)
     {
       /* crypto */
-      rijndael_encrypt(&aes_ctx, subkey_2, subkey_2);
+      AES_encrypt(&aes_ctx, subkey_2, subkey_2);
     }
  
     /* copy to out block */
-    memcpy(&keydata.mesh[i * 0x10], subkey_2, 0x10);
-  }
- 
-  /* set the key to the mesh */
-  rijndael_set_key(&aes_ctx, &keydata.mesh[0x20], 128);
- 
-  /* do the encryption routines for the aes key */
-  for (i = 0; i < 2; i++)
-  {
-    /* encrypt the data */
-    rijndael_encrypt(&aes_ctx, &keydata.mesh[0x10], &keydata.mesh[0x10]);
-  }
- 
-  /* set the key to that mesh shit */
-  rijndael_set_key(&aes_ctx, &keydata.mesh[0x10], 128);
- 
-  /* cbc decrypt the dA */
-  AES_cbc_decrypt((AES_ctx *)&aes_ctx, dA_enc, dA_out, 0x20);
+    memcpy(&g_mesh[i * 0x10], subkey_2, 0x10);
+  }  
+      
 }
-
  
 void encrypt_kirk16_private(u8 *dA_out, u8 *dA_dec)
 {
-  int i, k;
-  kirk16_data keydata;
-  u8 subkey_1[0x10], subkey_2[0x10];
-  rijndael_ctx aes_ctx;
- 
 
-  keydata.fuseid[7] = g_fuse90 &0xFF;
-  keydata.fuseid[6] = (g_fuse90>>8) &0xFF;
-  keydata.fuseid[5] = (g_fuse90>>16) &0xFF;
-  keydata.fuseid[4] = (g_fuse90>>24) &0xFF; 
-  keydata.fuseid[3] = g_fuse94 &0xFF;
-  keydata.fuseid[2] = (g_fuse94>>8) &0xFF;
-  keydata.fuseid[1] = (g_fuse94>>16) &0xFF;
-  keydata.fuseid[0] = (g_fuse94>>24) &0xFF;
-  /* set encryption key */
-  rijndael_set_key(&aes_ctx, kirk16_key, 128);
- 
-  /* set the subkeys */
-  for (i = 0; i < 0x10; i++)
-  {
-    /* set to the fuseid */
-    subkey_2[i] = subkey_1[i] = keydata.fuseid[i % 8];
-  }
- 
-  /* do aes crypto */
-  for (i = 0; i < 3; i++)
-  {
-    /* encrypt + decrypt */
-    rijndael_encrypt(&aes_ctx, subkey_1, subkey_1);
-    rijndael_decrypt(&aes_ctx, subkey_2, subkey_2);
-  }
- 
-  /* set new key */
-  rijndael_set_key(&aes_ctx, subkey_1, 128);
- 
-  /* now lets make the key mesh */
-  for (i = 0; i < 3; i++)
-  {
-    /* do encryption in group of 3 */
-    for (k = 0; k < 3; k++)
-    {
-      /* crypto */
-      rijndael_encrypt(&aes_ctx, subkey_2, subkey_2);
-    }
- 
-    /* copy to out block */
-    memcpy(&keydata.mesh[i * 0x10], subkey_2, 0x10);
-  }
- 
+  u8 genkey[0x10];
+  AES_ctx aes_ctx;
+
   /* set the key to the mesh */
-  rijndael_set_key(&aes_ctx, &keydata.mesh[0x20], 128);
- 
-  /* do the encryption routines for the aes key */
-  for (i = 0; i < 2; i++)
-  {
-    /* encrypt the data */
-    rijndael_encrypt(&aes_ctx, &keydata.mesh[0x10], &keydata.mesh[0x10]);
-  }
+  generate_key_from_mesh(genkey,2);
  
   /* set the key to that mesh shit */
-  rijndael_set_key(&aes_ctx, &keydata.mesh[0x10], 128);
- 
+  AES_set_key(&aes_ctx, genkey, 128);
+
   /* cbc encrypt the dA */
-  AES_cbc_encrypt((AES_ctx *)&aes_ctx, dA_dec, dA_out, 0x20);
+  AES_cbc_encrypt(&aes_ctx, dA_dec, dA_out, 0x20);
 }
 
 int kirk_CMD16(u8 * outbuff, int outsize, u8 * inbuff, int insize) {
@@ -684,7 +754,7 @@ int kirk_init2(u8 * rnd_seed, u32 seed_size, u32 fuseid_90, u32 fuseid_94) {
   //Set Fuse ID
   g_fuse90=fuseid_90;
   g_fuse94=fuseid_94;
-  
+  init_mesh();
   //Set KIRK1 main key
   AES_set_key(&aes_kirk1, kirk1_key, 128);
   
@@ -721,6 +791,10 @@ int sceUtilsBufferCopyWithRange(u8* outbuff, int outsize, u8* inbuff, int insize
     case KIRK_CMD_DECRYPT_PRIVATE: return kirk_CMD1(outbuff, inbuff, insize); break;
     case KIRK_CMD_ENCRYPT_IV_0: return kirk_CMD4(outbuff, inbuff, insize); break;
     case KIRK_CMD_DECRYPT_IV_0: return kirk_CMD7(outbuff, inbuff, insize); break;
+    case KIRK_CMD_ENCRYPT_IV_FUSE: return kirk_CMD5(outbuff, inbuff, insize); break;
+    case KIRK_CMD_DECRYPT_IV_FUSE: return kirk_CMD8(outbuff, inbuff, insize); break;
+    case KIRK_CMD_ENCRYPT_IV_USER: return kirk_CMD6(outbuff, inbuff, insize); break;
+    case KIRK_CMD_DECRYPT_IV_USER: return kirk_CMD9(outbuff, inbuff, insize); break;        
     case KIRK_CMD_PRIV_SIGN_CHECK: return kirk_CMD10(inbuff, insize); break;
     case KIRK_CMD_SHA1_HASH: return kirk_CMD11(outbuff, inbuff, insize); break;
     case KIRK_CMD_ECDSA_GEN_KEYS: return kirk_CMD12(outbuff,outsize); break;

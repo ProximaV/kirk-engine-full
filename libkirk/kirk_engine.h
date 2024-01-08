@@ -60,6 +60,16 @@ typedef struct
 
 typedef struct
 {
+	int mode;    //0
+	int unk_4;   //4
+	int unk_8;   //8
+	int keyseed; //C
+	int data_size;   //10
+	u8 userkey[0x10]; //14
+} KIRK_AES128CBC_USER_HEADER; //0x24
+
+typedef struct
+{
 	u8  AES_key[16];            //0
 	u8  CMAC_key[16];           //10
 	u8  CMAC_header_hash[16];   //20
@@ -198,6 +208,10 @@ int kirk_CMD1(u8* outbuff, u8* inbuff, int size);
 
 int kirk_CMD4(u8* outbuff, u8* inbuff, int size);
 int kirk_CMD7(u8* outbuff, u8* inbuff, int size);
+int kirk_CMD5(u8* outbuff, u8* inbuff, int size);
+int kirk_CMD8(u8* outbuff, u8* inbuff, int size);
+int kirk_CMD6(u8* outbuff, u8* inbuff, int size);
+int kirk_CMD9(u8* outbuff, u8* inbuff, int size);
 int kirk_CMD10(u8* inbuff, int insize);
 int kirk_CMD11(u8* outbuff, u8* inbuff, int size);
 int kirk_CMD12(u8* outbuff, int outsize);
@@ -220,7 +234,8 @@ int sceUtilsSetFuseID(u8*fuse);
 int sceUtilsBufferCopyWithRange(u8* outbuff, int outsize, u8* inbuff, int insize, int cmd);
 void decrypt_kirk16_private(u8 *dA_out, u8 *dA_enc);
 void encrypt_kirk16_private(u8 *dA_out, u8 *dA_dec);
-
+void init_mesh(void);
+void generate_key_from_mesh(u8 * key, int param);
 void secret_keygen( u8 *keyout);
 
 // Prototypes for the Elliptic Curve and Big Number functions

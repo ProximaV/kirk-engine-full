@@ -162,10 +162,41 @@ unsigned char sample_kirk1_ecdsa[320] =
     0x2E, 0x38, 0x94, 0x28, 0x9B, 0xE1, 0x1F, 0xC4, 0xCE, 0x61, 0xDB, 0x32, 0x0B, 0x5E, 0x05, 0xF0, 
 } ;
 
+void testkirk58()
+{
+    unsigned char testdata[0x100];
+	memset(testdata,0,0x10+0x14);
+	testdata[0] = 4;
+	testdata[0xC] = 0x0;
+	testdata[0xD] = 0x1;
+	testdata[0x10] = 0x10;
+	sceUtilsBufferCopyWithRange(testdata,0x24,testdata,0x24,0x5);    
+	hex_dump("Encrypted 5 ", testdata,0x24);
+	testdata[0] = 5;
+	sceUtilsBufferCopyWithRange(testdata,0x24,testdata,0x24,0x8);    
+	hex_dump("Decrypted 8 ", testdata,0x10);
+	return;
+}
+
+void testkirk69()
+{
+
+    unsigned char testdata[0x100];
+	memset(testdata,0,0x100);
+	testdata[0] = 4;
+	testdata[0xC] = 0x0;
+	testdata[0xD] = 0x2;
+	testdata[0x10] = 0x10;
+	sceUtilsBufferCopyWithRange(testdata,0x34,testdata,0x44,0x6);    
+	hex_dump("Encrypted 6 ", testdata,0x44);
+	sceUtilsBufferCopyWithRange(testdata,0x44,testdata,0x10,0x9);    
+	hex_dump("Decrypted 9 ", testdata,0x10);
+
+}
 
 void testkirk7() {
 	unsigned char testdata[0x10+0x14];
-	int i;
+	int i, count=0;
 	//Use a 00 test vector
 	for(i=0;i<0x80;i++) {
 		memset(testdata,0,0x10+0x14);
@@ -174,12 +205,13 @@ void testkirk7() {
 		testdata[0x10] = 0x10;
 		sceUtilsBufferCopyWithRange(testdata,0x24,testdata,0x10,0x7);
 		if(memcmp(testdata, kirk7tests[i], 0x10) == 0 ){
-			printf("KIRK7 Key 0x%x test passed\n",i);
+			count++;
 		} else {
 			printf("WARNING! KIRK 7 Key 0x%x failed!\n",i);
 		
 		}
 	}
+	printf("0x%x keys passed the test\n", count);
 		
 }
 int main(int argc, char  *argv[])
@@ -233,16 +265,22 @@ int main(int argc, char  *argv[])
 
 	strcpy((char*)testsig,"This is a test.");
 	
-	
 	// In the real world, you should use a secure way of generated a nice chunk of random data.
 	// There are good OS-specific ways available on each platform normally. Use those!
 	//
 	// The two values for the fuse id can be grabbed from your personal device
 	// by reading BC100090 for the first value and BC100094 for the second value.
 	// Process them as u32 so the endian order stays correct.
-	kirk_init2((u8*)"This is my test seed",20,0x12312355 , 0x4444 );
+	kirk_init2((u8*)"This is my test seed",20,0x12345678, 0xabcd  ); 
+
 	//kirk_init();
+	printf("Testing Kirk 7\n");
 	testkirk7();
+	printf("Testing Kirk 5 and 8\n");
+	testkirk58();
+	printf("Testing Kirk 6 and 9\n");
+	testkirk69();
+
 	memset(rnd,0,0x14);
 	memset(rndbig,0,0x80);
 	sceUtilsBufferCopyWithRange(testsig,0x1000,testsig,0x1000,0);

@@ -340,7 +340,7 @@ int kirk_CMD5(u8* outbuff, u8* inbuff, int size)
   if(header->data_size == 0) return KIRK_DATA_SIZE_ZERO;
   
   generate_key_from_mesh(key,1);
-  
+  //hex_dump("key5", key,0x10);
   //Set the key
   AES_set_key(&aesKey, key, 128);
   AES_cbc_encrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_HEADER), outbuff+sizeof(KIRK_AES128CBC_HEADER), size);
@@ -349,9 +349,10 @@ int kirk_CMD5(u8* outbuff, u8* inbuff, int size)
 }
 /*
 1. encrypt mesh 0 with mesh 2, twice (param 2)
-2. decrypt user key with result of 1
-3. encrypt result of 2 with user key
-4. use key from 3 in enc/dec operation as requested by kirk6/9
+2. encrypt random seed with  user key
+3. encrypt random seed with step 1 key
+4. use key from 2 in enc/dec operation as requested by kirk6/9 encrypt into data payload +0x10
+5. Add step 3 key to data payload +0
 */
 
 int kirk_CMD6(u8* outbuff, u8* inbuff, int size)
@@ -360,6 +361,7 @@ int kirk_CMD6(u8* outbuff, u8* inbuff, int size)
   u8 key[0x10];
   u8 keyseed[0x10];
   u8 userkey[0x10];
+  u8 randbuf[0x14];
   
   AES_ctx aesKey;
   
@@ -372,12 +374,17 @@ int kirk_CMD6(u8* outbuff, u8* inbuff, int size)
   memcpy(userkey, header->userkey, 0x10);
   //Set the key
   AES_set_key(&aesKey, key, 128);
-  AES_decrypt(&aesKey, userkey, keyseed);
+  kirk_CMD14(randbuf,0x14);
+  AES_encrypt(&aesKey, randbuf,keyseed); // Encrypt random with Genkey 2
   AES_set_key(&aesKey, userkey, 128);
-  AES_encrypt(&aesKey, keyseed,key);
+  AES_encrypt(&aesKey, randbuf,key);
   AES_set_key(&aesKey, key,128);
   outbuff[0] = 5;
+  //hex_dump("key6", key,0x10);
+  
+  
   AES_cbc_encrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_USER_HEADER), outbuff+sizeof(KIRK_AES128CBC_USER_HEADER)+0x10, size);
+  memcpy(outbuff+sizeof(KIRK_AES128CBC_USER_HEADER),keyseed,0x10); // copy out the encrypted random val
   
   return KIRK_OPERATION_SUCCESS;
 }
@@ -415,7 +422,7 @@ int kirk_CMD8(u8* outbuff, u8* inbuff, int size)
   if(header->data_size == 0) return KIRK_DATA_SIZE_ZERO;
   
   generate_key_from_mesh(key,1);
-
+  //hex_dump("key8", key,0x10);
   //Set the key
   AES_set_key(&aesKey, key, 128);
   AES_cbc_decrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_HEADER), outbuff, size);
@@ -441,13 +448,16 @@ int kirk_CMD9(u8* outbuff, u8* inbuff, int size)
   memcpy(userkey, header->userkey, 0x10);
   //Set the key
   AES_set_key(&aesKey, key, 128);
-  AES_decrypt(&aesKey, userkey, keyseed);
+  memcpy(keyseed,inbuff+sizeof(KIRK_AES128CBC_USER_HEADER), 0x10);
+  AES_decrypt(&aesKey, keyseed,keyseed);
   AES_set_key(&aesKey, userkey, 128);
   AES_encrypt(&aesKey, keyseed,key);
-
+  AES_set_key(&aesKey, key,128);
+  //hex_dump("key9", key,0x10);
   //Set the key
   AES_set_key(&aesKey, key, 128);
-  AES_cbc_decrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_USER_HEADER), outbuff, size);
+  AES_cbc_decrypt(&aesKey, inbuff+0x34, outbuff, size);
+
   
   return KIRK_OPERATION_SUCCESS;
 }
@@ -580,10 +590,10 @@ void generate_key_from_mesh(u8 * key, int param)
     u8 genkey[0x10];
     AES_ctx aes_ctx;
     int i;
-    
+    memset(genkey,0,0x10);
     int rounds = (param >> 1) +1;
-    memcpy(genkey,&g_mesh[param&1 * 0x10], 0x10);
-
+    memcpy(genkey,&g_mesh[(param&1) * 0x10], 0x10);
+    //hex_dump("genkey", genkey,0x10);
     AES_set_key(&aes_ctx, &g_mesh[0x20], 128);
     for (i = 0; i < rounds; i++)
     {
@@ -659,7 +669,8 @@ void init_mesh()
  
     /* copy to out block */
     memcpy(&g_mesh[i * 0x10], subkey_2, 0x10);
-  }  
+  }
+  //hex_dump("Mesh", g_mesh,0x30);  
       
 }
  

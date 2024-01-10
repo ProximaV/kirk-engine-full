@@ -330,8 +330,8 @@ int kirk_CMD0(u8* outbuff, u8* inbuff, int size)
     AES_ctx bodykey;
     u8 cmachash[0x10];
     
-    AES_set_key(&cmackey,keyvault[0],128);
-    AES_set_key(&bodykey,keyvault[1],128);
+    AES_set_key(&cmackey,keyvault[1],128);
+    AES_set_key(&bodykey,keyvault[0],128);
     AES_CMAC(&cmackey, inbuff+sizeof(KIRK_KBOOTI_HEADER), header->length, cmachash);
     if(memcmp(cmachash, header->cmac, 16) != 0) return KIRK_NOT_ENABLED; // yeah this is not right, but it does return 1 in this case
     AES_cbc_decrypt(&bodykey, inbuff+sizeof(KIRK_KBOOTI_HEADER), outbuff, header->length);

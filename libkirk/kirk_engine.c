@@ -36,8 +36,12 @@
 #include "SHA1.h"
 
 /* ------------------------- KEY VAULT ------------------------- */
-unsigned char keyvault[0x80][0x10] =
+unsigned char keyvault[0x84][0x10] =
 {
+    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // UNKNOWN KBOOTI CMAC KEY
+    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // UNKNOWN KBOOTI BODY KEY
+    {0x98, 0xC9, 0x40, 0x97, 0x5C, 0x1D, 0x10, 0xE8, 0x7F, 0xE6, 0x0E, 0xA3, 0xFD, 0x03, 0xA8, 0xBA}, // KIRK 1 KEY
+    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // UNKNOWN KIRK 2 KEY
     {0x2C, 0x92, 0xE5, 0x90, 0x2B, 0x86, 0xC1, 0x06, 0xB7, 0x2E, 0xEA, 0x6C, 0xD4, 0xEC, 0x72, 0x48},
     {0x05, 0x8D, 0xC8, 0x0B, 0x33, 0xA5, 0xBF, 0x9D, 0x56, 0x98, 0xFA, 0xE0, 0xD3, 0x71, 0x5E, 0x1F},
     {0xB8, 0x13, 0xC3, 0x5E, 0xC6, 0x44, 0x41, 0xE3, 0xDC, 0x3C, 0x16, 0xF5, 0xB4, 0x5E, 0x64, 0x84},
@@ -168,9 +172,9 @@ unsigned char keyvault[0x80][0x10] =
     {0x5F, 0x8C, 0x17, 0x9F, 0xC1, 0xB2, 0x1D, 0xF1, 0xF6, 0x36, 0x7A, 0x9C, 0xF7, 0xD3, 0xD4, 0x7C},
 };
 
-u8 kirk1_key[] =   {0x98, 0xC9, 0x40, 0x97, 0x5C, 0x1D, 0x10, 0xE8, 0x7F, 0xE6, 0x0E, 0xA3, 0xFD, 0x03, 0xA8, 0xBA};
 
-u8 kirk16_key[]  = {0x47, 0x5E, 0x09, 0xF4, 0xA2, 0x37, 0xDA, 0x9B, 0xEF, 0xFF, 0x3B, 0xC0, 0x77, 0x14, 0x3D, 0x8A};
+// THIS IS THE KEY MASTER, ARE YOU THE GATEKEEPER?
+u8 MASTER_KEY[]  = {0x47, 0x5E, 0x09, 0xF4, 0xA2, 0x37, 0xDA, 0x9B, 0xEF, 0xFF, 0x3B, 0xC0, 0x77, 0x14, 0x3D, 0x8A};
 
 /* ECC Curves for Kirk 1 and Kirk 0x11 */
 // Common Curve paramters p and a
@@ -220,7 +224,9 @@ char is_kirk_initialized; //"init" emulation
 
 /* ------------------------- IMPLEMENTATION ------------------------- */
 
-int kirk_CMD0(u8* outbuff, u8* inbuff, int size, int generate_trash)
+
+// Custom Encryption functions (not part of real KIRK)
+int kirk_CMD1ENC(u8* outbuff, u8* inbuff, int size, int generate_trash)
 {
   KIRK_CMD1_HEADER* header = (KIRK_CMD1_HEADER*)outbuff;
   header_keys *keys = (header_keys *)outbuff; //0-15 AES key, 16-31 CMAC key
@@ -260,6 +266,79 @@ int kirk_CMD0(u8* outbuff, u8* inbuff, int size, int generate_trash)
   return KIRK_OPERATION_SUCCESS;
 }
 
+int kirk_CMD3ENC(u8* outbuff, u8* inbuff, int size, int generate_trash)
+{
+  KIRK_CMD1_HEADER* header = (KIRK_CMD1_HEADER*)outbuff;
+  header_keys *keys = (header_keys *)outbuff; //0-15 AES key, 16-31 CMAC key
+  int chk_size;
+  AES_ctx k1;
+  AES_ctx cmac_key;
+  u8 cmac_header_hash[16];
+  u8 cmac_data_hash[16];
+  u8 genkey[16];
+    
+  if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+
+  memcpy(outbuff, inbuff, size);
+   
+  if(header->mode != KIRK_MODE_CMD3) return KIRK_INVALID_MODE;
+  
+  //FILL PREDATA WITH RANDOM DATA
+  if(generate_trash) kirk_CMD14(outbuff+sizeof(KIRK_CMD1_HEADER), header->data_offset);
+  
+  //Make sure data is 16 aligned
+  chk_size = header->data_size;
+  if(chk_size % 16) chk_size += 16 - (chk_size % 16);
+  
+  //ENCRYPT DATA
+  AES_set_key(&k1, keys->AES, 128);
+  AES_cbc_encrypt(&k1, inbuff+sizeof(KIRK_CMD1_HEADER)+header->data_offset, (u8*)outbuff+sizeof(KIRK_CMD1_HEADER)+header->data_offset, chk_size);
+  
+  //CMAC HASHES
+  AES_set_key(&cmac_key, keys->CMAC, 128);
+  AES_CMAC(&cmac_key, outbuff+0x60, 0x30, cmac_header_hash);
+  AES_CMAC(&cmac_key, outbuff+0x60, 0x30 + chk_size + header->data_offset, cmac_data_hash);
+  
+  memcpy(header->CMAC_header_hash, cmac_header_hash, 16);
+  memcpy(header->CMAC_data_hash, cmac_data_hash, 16);
+  
+  //ENCRYPT KEYS
+  generate_key_from_mesh(genkey,0);
+  AES_set_key(&k1,genkey,128);
+  AES_cbc_encrypt(&k1, inbuff, outbuff, 16*2);
+  return KIRK_OPERATION_SUCCESS;
+}
+
+// Standard KIRK functions
+
+/*
+ Decrypt KBOOTI header from devkit IPL
+ Format:
+ 0x00: CMAC of body
+ 0x10: length of body
+ 0x12: body
+ 
+ These use key slots 0 and 1 which are currently unknown
+*/
+
+int kirk_CMD0(u8* outbuff, u8* inbuff, int size)
+{
+    
+    // Since the KEYS are empty this will not work yet but is structurally correct.
+    KIRK_KBOOTI_HEADER* header = (KIRK_KBOOTI_HEADER*)inbuff;
+    AES_ctx cmackey;
+    AES_ctx bodykey;
+    u8 cmachash[0x10];
+    
+    AES_set_key(&cmackey,keyvault[0],128);
+    AES_set_key(&bodykey,keyvault[1],128);
+    AES_CMAC(&cmackey, inbuff+sizeof(KIRK_KBOOTI_HEADER), header->length, cmachash);
+    if(memcmp(cmachash, header->cmac, 16) != 0) return KIRK_NOT_ENABLED; // yeah this is not right, but it does return 1 in this case
+    AES_cbc_decrypt(&bodykey, inbuff+sizeof(KIRK_KBOOTI_HEADER), outbuff, header->length);
+    return KIRK_OPERATION_SUCCESS;
+    
+}
+
 int kirk_CMD1(u8* outbuff, u8* inbuff, int size)
 {
   KIRK_CMD1_HEADER* header = (KIRK_CMD1_HEADER*)inbuff;
@@ -297,6 +376,38 @@ int kirk_CMD1(u8* outbuff, u8* inbuff, int size)
 	  if(!ecdsa_verify(data_hash,eheader->data_sig_r,eheader->data_sig_s)) {
 	    return KIRK_DATA_HASH_INVALID;
 	  }
+
+  } else  {
+    int ret = kirk_CMD10(inbuff, size);
+    if(ret != KIRK_OPERATION_SUCCESS) return ret;
+  }
+  
+  AES_set_key(&k1, keys.AES, 128);
+  AES_cbc_decrypt(&k1, inbuff+sizeof(KIRK_CMD1_HEADER)+header->data_offset, outbuff, header->data_size);  
+  
+  return KIRK_OPERATION_SUCCESS;
+}
+
+int kirk_CMD3(u8* outbuff, u8* inbuff, int size)
+{
+  KIRK_CMD1_HEADER* header = (KIRK_CMD1_HEADER*)inbuff;
+  header_keys keys; //0-15 AES key, 16-31 CMAC key
+  AES_ctx k1;
+  u8 genkey[0x10];
+	
+	if(size < 0x90) return KIRK_INVALID_SIZE;
+  if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+  if(header->mode != KIRK_MODE_CMD3) return KIRK_INVALID_MODE;
+  
+  // Generate per console key
+  generate_key_from_mesh(genkey,0);
+  AES_set_key(&k1, genkey,128);
+  AES_cbc_decrypt(&k1, inbuff, (u8*)&keys, 16*2); //decrypt AES & CMAC key to temp buffer
+  
+  if(header->ecdsa_hash == 1)
+  {
+    // ECDSA variants of KIRK3 are not supported yet
+    return KIRK_INVALID_MODE;
 
   } else  {
     int ret = kirk_CMD10(inbuff, size);
@@ -470,6 +581,7 @@ int kirk_CMD10(u8* inbuff, int insize)
   u8 cmac_header_hash[16];
   u8 cmac_data_hash[16];
   AES_ctx cmac_key;
+  AES_ctx gen0;
   int chk_size;
   
   if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
@@ -492,6 +604,26 @@ int kirk_CMD10(u8* inbuff, int insize)
   
     return KIRK_OPERATION_SUCCESS;
   }
+    
+  if(header->mode == KIRK_MODE_CMD3)
+  {
+    u8 genkey[0x10];
+    generate_key_from_mesh(genkey,0);
+    AES_set_key(&gen0, genkey,128);
+    AES_cbc_decrypt(&gen0, inbuff, (u8*)&keys, 32); //decrypt AES & CMAC key to temp buffer
+    AES_set_key(&cmac_key, keys.CMAC, 128);
+    AES_CMAC(&cmac_key, inbuff+0x60, 0x30, cmac_header_hash);
+  
+    //Make sure data is 16 aligned
+    chk_size = header->data_size;
+    if(chk_size % 16) chk_size += 16 - (chk_size % 16);
+    AES_CMAC(&cmac_key, inbuff+0x60, 0x30 + chk_size + header->data_offset, cmac_data_hash);
+  
+    if(memcmp(cmac_header_hash, header->CMAC_header_hash, 16) != 0) return KIRK_HEADER_HASH_INVALID;
+    //if(memcmp(cmac_data_hash, header->CMAC_data_hash, 16) != 0) return KIRK_DATA_HASH_INVALID;
+  
+    return KIRK_OPERATION_SUCCESS;
+  }    
   return KIRK_SIG_CHECK_INVALID; //Checks for cmd 2 & 3 not included right now
 }
 
@@ -637,7 +769,7 @@ void init_mesh()
   fuseid[1] = (g_fuse94>>16) &0xFF;
   fuseid[0] = (g_fuse94>>24) &0xFF;
   /* set encryption key */
-  AES_set_key(&aes_ctx, kirk16_key, 128);  
+  AES_set_key(&aes_ctx, MASTER_KEY, 128);  
  
   /* set the subkeys */
   for (i = 0; i < 0x10; i++)
@@ -767,7 +899,7 @@ int kirk_init2(u8 * rnd_seed, u32 seed_size, u32 fuseid_90, u32 fuseid_94) {
   g_fuse94=fuseid_94;
   init_mesh();
   //Set KIRK1 main key
-  AES_set_key(&aes_kirk1, kirk1_key, 128);
+  AES_set_key(&aes_kirk1, keyvault[2], 128);
   
 
   is_kirk_initialized = 1;
@@ -777,9 +909,9 @@ u8* kirk_4_7_get_key(int key_type)
 {
 	if((key_type < 0) || (key_type >=0x80)) return (u8*)KIRK_INVALID_SIZE;
 
-	return keyvault[key_type];
+	return keyvault[key_type+4];
 }
-
+/*
 int kirk_CMD1_ex(u8* outbuff, u8* inbuff, int size, KIRK_CMD1_HEADER* header)
 {
   u8* buffer = (u8*)malloc(size);
@@ -792,27 +924,31 @@ int kirk_CMD1_ex(u8* outbuff, u8* inbuff, int size, KIRK_CMD1_HEADER* header)
   free(buffer);
   return ret;
 }
-
+*/
 
 int sceUtilsBufferCopyWithRange(u8* outbuff, int outsize, u8* inbuff, int insize, int cmd)
 {
   switch(cmd)
   {
-    case KIRK_CMD_ENCRYPT_PRIVATE: return kirk_CMD0(outbuff, inbuff, insize, 1); break;
-    case KIRK_CMD_DECRYPT_PRIVATE: return kirk_CMD1(outbuff, inbuff, insize); break;
-    case KIRK_CMD_ENCRYPT_IV_0: return kirk_CMD4(outbuff, inbuff, insize); break;
-    case KIRK_CMD_DECRYPT_IV_0: return kirk_CMD7(outbuff, inbuff, insize); break;
-    case KIRK_CMD_ENCRYPT_IV_FUSE: return kirk_CMD5(outbuff, inbuff, insize); break;
-    case KIRK_CMD_DECRYPT_IV_FUSE: return kirk_CMD8(outbuff, inbuff, insize); break;
-    case KIRK_CMD_ENCRYPT_IV_USER: return kirk_CMD6(outbuff, inbuff, insize); break;
-    case KIRK_CMD_DECRYPT_IV_USER: return kirk_CMD9(outbuff, inbuff, insize); break;        
-    case KIRK_CMD_PRIV_SIGN_CHECK: return kirk_CMD10(inbuff, insize); break;
-    case KIRK_CMD_SHA1_HASH: return kirk_CMD11(outbuff, inbuff, insize); break;
-    case KIRK_CMD_ECDSA_GEN_KEYS: return kirk_CMD12(outbuff,outsize); break;
+    case KIRK_CMD_0_DEVKIT_DECRYPT:     return kirk_CMD0(outbuff, inbuff, insize); break;
+    case KIRK_CMD_1_DECRYPT_VERIFY:     return kirk_CMD1(outbuff, inbuff, insize); break;
+    case KIRK_CMD_3_DECRYPT_VERIFY:     return kirk_CMD3(outbuff, inbuff, insize); break;
+    case KIRK_CMD_ENCRYPT_IV_0:         return kirk_CMD4(outbuff, inbuff, insize); break;
+    case KIRK_CMD_DECRYPT_IV_0:         return kirk_CMD7(outbuff, inbuff, insize); break;
+    case KIRK_CMD_ENCRYPT_IV_FUSE:      return kirk_CMD5(outbuff, inbuff, insize); break;
+    case KIRK_CMD_DECRYPT_IV_FUSE:      return kirk_CMD8(outbuff, inbuff, insize); break;
+    case KIRK_CMD_ENCRYPT_IV_USER:      return kirk_CMD6(outbuff, inbuff, insize); break;
+    case KIRK_CMD_DECRYPT_IV_USER:      return kirk_CMD9(outbuff, inbuff, insize); break;        
+    case KIRK_CMD_PRIV_SIGN_CHECK:      return kirk_CMD10(inbuff, insize); break;
+    case KIRK_CMD_SHA1_HASH:            return kirk_CMD11(outbuff, inbuff, insize); break;
+    case KIRK_CMD_ECDSA_GEN_KEYS:       return kirk_CMD12(outbuff,outsize); break;
     case KIRK_CMD_ECDSA_MULTIPLY_POINT: return kirk_CMD13(outbuff,outsize, inbuff, insize); break;
-    case KIRK_CMD_PRNG: return kirk_CMD14(outbuff,outsize); break;
-    case KIRK_CMD_ECDSA_SIGN: return kirk_CMD16(outbuff, outsize, inbuff, insize); break;
-    case KIRK_CMD_ECDSA_VERIFY: return kirk_CMD17(inbuff, insize); break;     
+    case KIRK_CMD_PRNG:                 return kirk_CMD14(outbuff,outsize); break;
+    case KIRK_CMD_ECDSA_SIGN:           return kirk_CMD16(outbuff, outsize, inbuff, insize); break;
+    case KIRK_CMD_ECDSA_VERIFY:         return kirk_CMD17(inbuff, insize); break;     
+    // Custom functions to help
+    case KIRK_CMD_1_ENCRYPT:            return kirk_CMD1ENC(outbuff, inbuff, insize,1); break;
+    case KIRK_CMD_3_ENCRYPT:            return kirk_CMD3ENC(outbuff, inbuff, insize,1); break;        
   }
   return -1;
 }

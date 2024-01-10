@@ -49,6 +49,12 @@ typedef unsigned int u32;
 #define KIRK_INVALID_SIZE 0xF
 #define KIRK_DATA_SIZE_ZERO 0x10
 
+typedef struct 
+{
+        u8 cmac[0x10];  //0x0
+        u16 length;     //0x10
+} KIRK_KBOOTI_HEADER;   //0x12
+
 typedef struct
 {
 	int mode;    //0
@@ -144,10 +150,10 @@ typedef struct
 } KIRK_CMD17_BUFFER;//0x64
 
 //mode passed to sceUtilsBufferCopyWithRange
-#define KIRK_CMD_ENCRYPT_PRIVATE 0
-#define KIRK_CMD_DECRYPT_PRIVATE 1
+#define KIRK_CMD_0_DEVKIT_DECRYPT 0
+#define KIRK_CMD_1_DECRYPT_VERIFY 1
 #define KIRK_CMD_2 2
-#define KIRK_CMD_3 3
+#define KIRK_CMD_3_DECRYPT_VERIFY 3
 #define KIRK_CMD_ENCRYPT_IV_0 4
 #define KIRK_CMD_ENCRYPT_IV_FUSE 5
 #define KIRK_CMD_ENCRYPT_IV_USER 6
@@ -163,6 +169,10 @@ typedef struct
 #define KIRK_CMD_ECDSA_SIGN 16
 #define KIRK_CMD_ECDSA_VERIFY 17
 
+// These are custom found here only for encrypting data
+#define KIRK_CMD_1_ENCRYPT 18
+#define KIRK_CMD_3_ENCRYPT 19
+
 //"mode" in header
 #define KIRK_MODE_CMD1 1
 #define KIRK_MODE_CMD2 2
@@ -177,14 +187,14 @@ typedef struct
 
 /*
       // Private Sig + Cipher
-      0x01: Super-Duper decryption (no inverse)
-      0x02: Encrypt Operation (inverse of 0x03)
-      0x03: Decrypt Operation (inverse of 0x02)
+      0x01: Regular (non-superduper) decrpytion and verify of PRX or IPL blocks
+      0x02: Decrypt and verify Secure payload and re-encrypt per console
+      0x03: Regular (non-superduper) decrpytion of per console (could be gen from 0x2)
 
       // Cipher
       0x04: Encrypt Operation (inverse of 0x07) (IV=0)
-      0x05: Encrypt Operation (inverse of 0x08) (IV=FuseID)
-      0x06: Encrypt Operation (inverse of 0x09) (IV=UserDefined)
+      0x05: Encrypt Operation (inverse of 0x08) (IV=0 Key FUSEID Derived)
+      0x06: Encrypt Operation (inverse of 0x09) (IV=0 Random Key Encrypted with UserDefined )
       0x07: Decrypt Operation (inverse of 0x04)
       0x08: Decrypt Operation (inverse of 0x05)
       0x09: Decrypt Operation (inverse of 0x06)
@@ -192,10 +202,10 @@ typedef struct
       // Sig Gens
       0x0A: Private Signature Check (checks for private SCE sig)
       0x0B: SHA1 Hash
-      0x0C: Mul1
-      0x0D: Mul2
+      0x0C: Generate an ECDSA Key pair
+      0x0D: Point Multiplication
       0x0E: Random Number Gen
-      0x0F: (absolutely no idea – could be KIRK initialization)
+      0x0F: (PRNG SEED)
       0x10: Signature Gen
       // Sig Checks
       0x11: Signature Check (checks for generated sigs)
@@ -203,14 +213,15 @@ typedef struct
 */
 
 //kirk-like funcs
-int kirk_CMD0(u8* outbuff, u8* inbuff, int size, int generate_trash);
+int kirk_CMD0(u8* outbuff, u8* inbuff, int size);
 int kirk_CMD1(u8* outbuff, u8* inbuff, int size);
+int kirk_CMD3(u8* outbuff, u8* inbuff, int size);
 
 int kirk_CMD4(u8* outbuff, u8* inbuff, int size);
-int kirk_CMD7(u8* outbuff, u8* inbuff, int size);
 int kirk_CMD5(u8* outbuff, u8* inbuff, int size);
-int kirk_CMD8(u8* outbuff, u8* inbuff, int size);
 int kirk_CMD6(u8* outbuff, u8* inbuff, int size);
+int kirk_CMD7(u8* outbuff, u8* inbuff, int size);
+int kirk_CMD8(u8* outbuff, u8* inbuff, int size);
 int kirk_CMD9(u8* outbuff, u8* inbuff, int size);
 int kirk_CMD10(u8* inbuff, int insize);
 int kirk_CMD11(u8* outbuff, u8* inbuff, int size);
@@ -220,7 +231,10 @@ int kirk_CMD14(u8* outbuff, int outsize);
 int kirk_CMD16(u8* outbuff, int outsize,u8* inbuff, int insize);
 int kirk_CMD17(u8* inbuff, int insize);
 
-int kirk_init(); //CMD 0xF?
+int kirk_CMD1ENC(u8* outbuff, u8* inbuff, int size, int generate_trash);
+int kirk_CMD3ENC(u8* outbuff, u8* inbuff, int size, int generate_trash);
+
+int kirk_init(); 
 int kirk_init2(u8 *, u32, u32, u32);
 
 //helper funcs

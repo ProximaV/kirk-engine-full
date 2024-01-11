@@ -9,6 +9,7 @@ Near complete implementation of the original kirk-engine
 * Updated services for Encryption for use with Service 1 and 3
 * Corrected Service 0 to actual kbooti decryption algorithm - missing keys, see to-dos
 * Updated Key Vault to be more consistent with actual processor
+* Added support for Service 18 Cert Verify (CMAC really)
 
 ## To-do
 
@@ -16,4 +17,4 @@ Near complete implementation of the original kirk-engine
 * Missing ECDSA signing support for Service 1 Encryption
 * Missing ECDSA support for Service 3
 * Missing support for Service 2
-* Missing support for Service 18
+

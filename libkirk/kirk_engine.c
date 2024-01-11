@@ -857,6 +857,22 @@ int kirk_CMD17(u8 * inbuff, int insize) {
 }
 
 
+int kirk_CMD18(u8 * inbuff, int insize)
+{
+    u8 cmac_hash[0x10];
+    u8 key[0x10];
+    AES_ctx cmackey;
+    
+    if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+    if(insize != 0xb8) return KIRK_INVALID_SIZE;
+            
+    generate_key_from_mesh(key,4);
+    AES_set_key(&cmackey, key,128);
+    AES_CMAC(&cmackey, inbuff, 0xA8, cmac_hash);
+    if(memcmp(cmac_hash, inbuff+0xA8, 16) != 0) return KIRK_SIG_CHECK_INVALID;
+    return KIRK_OPERATION_SUCCESS;
+
+}
 
 int kirk_init()
 {
@@ -911,20 +927,7 @@ u8* kirk_4_7_get_key(int key_type)
 
 	return keyvault[key_type+4];
 }
-/*
-int kirk_CMD1_ex(u8* outbuff, u8* inbuff, int size, KIRK_CMD1_HEADER* header)
-{
-  u8* buffer = (u8*)malloc(size);
-  int ret;
-  
-  memcpy(buffer, header, sizeof(KIRK_CMD1_HEADER));
-  memcpy(buffer+sizeof(KIRK_CMD1_HEADER), inbuff, header->data_size);
-  
-  ret = kirk_CMD1(outbuff, buffer, size);
-  free(buffer);
-  return ret;
-}
-*/
+
 
 int sceUtilsBufferCopyWithRange(u8* outbuff, int outsize, u8* inbuff, int insize, int cmd)
 {
@@ -945,7 +948,8 @@ int sceUtilsBufferCopyWithRange(u8* outbuff, int outsize, u8* inbuff, int insize
     case KIRK_CMD_ECDSA_MULTIPLY_POINT: return kirk_CMD13(outbuff,outsize, inbuff, insize); break;
     case KIRK_CMD_PRNG:                 return kirk_CMD14(outbuff,outsize); break;
     case KIRK_CMD_ECDSA_SIGN:           return kirk_CMD16(outbuff, outsize, inbuff, insize); break;
-    case KIRK_CMD_ECDSA_VERIFY:         return kirk_CMD17(inbuff, insize); break;     
+    case KIRK_CMD_ECDSA_VERIFY:         return kirk_CMD17(inbuff, insize); break;   
+    case KIRK_CMD_CERT_VERIFY:          return kirk_CMD18(inbuff, insize); break;     
     // Custom functions to help
     case KIRK_CMD_1_ENCRYPT:            return kirk_CMD1ENC(outbuff, inbuff, insize,1); break;
     case KIRK_CMD_3_ENCRYPT:            return kirk_CMD3ENC(outbuff, inbuff, insize,1); break;        

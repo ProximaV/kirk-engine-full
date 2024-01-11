@@ -168,10 +168,12 @@ typedef struct
 #define KIRK_CMD_15 15
 #define KIRK_CMD_ECDSA_SIGN 16
 #define KIRK_CMD_ECDSA_VERIFY 17
+#define KIRK_CMD_CERT_VERIFY 18
 
 // These are custom found here only for encrypting data
-#define KIRK_CMD_1_ENCRYPT 18
-#define KIRK_CMD_3_ENCRYPT 19
+#define KIRK_CMD_1_ENCRYPT 19
+#define KIRK_CMD_3_ENCRYPT 20
+
 
 //"mode" in header
 #define KIRK_MODE_CMD1 1

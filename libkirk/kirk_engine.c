@@ -370,7 +370,7 @@ int kirk_CMD1(u8* outbuff, u8* inbuff, int size)
 	    return KIRK_HEADER_HASH_INVALID;
 	  }
 	  SHAInit(&sha);
-		SHAUpdate(&sha, (u8*)eheader+0x60, size-0x60);
+		SHAUpdate(&sha, (u8*)eheader+0x60, 0x30 + chk_size + header->data_offset);
 		SHAFinal(data_hash, &sha);  
 		
 	  if(!ecdsa_verify(data_hash,eheader->data_sig_r,eheader->data_sig_s)) {

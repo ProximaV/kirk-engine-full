@@ -747,7 +747,7 @@ void decrypt_kirk16_private(u8 *dA_out, u8 *dA_enc)
   AES_ctx aes_ctx;
 
   /* set the key to the mesh */
-  generate_key_from_mesh(genkey,2);
+  generate_key_from_mesh(genkey,3);
  
   /* set the key to that mesh shit */
   AES_set_key(&aes_ctx, genkey, 128);

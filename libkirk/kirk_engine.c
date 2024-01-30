@@ -362,6 +362,8 @@ int kirk_CMD1(u8* outbuff, u8* inbuff, int size)
   	memcpy(kirk1_pub,Px1,20);
   	memcpy(kirk1_pub+20,Py1,20);
   	ecdsa_set_pub(kirk1_pub);
+        chk_size=eheader->data_size;
+        if (chk_size % 16) chk_size += 16 - ( chk_size % 16 );
 		//Hash the Header
 		SHAInit(&sha);
 		SHAUpdate(&sha, (u8*)eheader+0x60, 0x30);

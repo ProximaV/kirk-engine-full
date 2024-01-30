@@ -323,29 +323,28 @@ int kirk_CMD3ENC(u8* outbuff, u8* inbuff, int size, int generate_trash)
 
 int kirk_CMD0(u8* outbuff, u8* inbuff, int size)
 {
-    
-    // Since the KEYS are empty this will not work yet but is structurally correct.
-    KIRK_KBOOTI_HEADER* header = (KIRK_KBOOTI_HEADER*)inbuff;
-    AES_ctx cmackey;
-    AES_ctx bodykey;
-    u8 cmachash[0x10];
-    
-    AES_set_key(&cmackey,keyvault[1],128);
-    AES_set_key(&bodykey,keyvault[0],128);
-    AES_CMAC(&cmackey, inbuff+sizeof(KIRK_KBOOTI_HEADER), header->length, cmachash);
-    if(memcmp(cmachash, header->cmac, 16) != 0) return KIRK_NOT_ENABLED; // yeah this is not right, but it does return 1 in this case
-    AES_cbc_decrypt(&bodykey, inbuff+sizeof(KIRK_KBOOTI_HEADER), outbuff, header->length);
-    return KIRK_OPERATION_SUCCESS;
-    
+  // Since the KEYS are empty this will not work yet but is structurally correct.
+  KIRK_KBOOTI_HEADER* header = (KIRK_KBOOTI_HEADER*)inbuff;
+  AES_ctx cmackey;
+  AES_ctx bodykey;
+  u8 cmachash[0x10];
+
+  AES_set_key(&cmackey,keyvault[1],128);
+  AES_set_key(&bodykey,keyvault[0],128);
+  AES_CMAC(&cmackey, inbuff+sizeof(KIRK_KBOOTI_HEADER), header->length, cmachash);
+  if(memcmp(cmachash, header->cmac, 16) != 0) return KIRK_NOT_ENABLED; // yeah this is not right, but it does return 1 in this case
+  AES_cbc_decrypt(&bodykey, inbuff+sizeof(KIRK_KBOOTI_HEADER), outbuff, header->length);
+  return KIRK_OPERATION_SUCCESS;
 }
 
 int kirk_CMD1(u8* outbuff, u8* inbuff, int size)
 {
   KIRK_CMD1_HEADER* header = (KIRK_CMD1_HEADER*)inbuff;
   header_keys keys; //0-15 AES key, 16-31 CMAC key
+  int chk_size;
   AES_ctx k1;
-	
-	if(size < 0x90) return KIRK_INVALID_SIZE;
+  
+  if(size < 0x90) return KIRK_INVALID_SIZE;
   if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
   if(header->mode != KIRK_MODE_CMD1) return KIRK_INVALID_MODE;
   
@@ -353,38 +352,43 @@ int kirk_CMD1(u8* outbuff, u8* inbuff, int size)
   
   if(header->ecdsa_hash == 1)
   {
-  	SHA_CTX sha;
-  	KIRK_CMD1_ECDSA_HEADER* eheader = (KIRK_CMD1_ECDSA_HEADER*) inbuff;
-  	u8 kirk1_pub[40];
-  	u8 header_hash[20];u8 data_hash[20];
-  	ecdsa_set_curve(ec_p,ec_a,ec_b1,ec_N1,Gx1,Gy1);
-  	memcpy(kirk1_pub,Px1,20);
-  	memcpy(kirk1_pub+20,Py1,20);
-  	ecdsa_set_pub(kirk1_pub);
-		//Hash the Header
-		SHAInit(&sha);
-		SHAUpdate(&sha, (u8*)eheader+0x60, 0x30);
-		SHAFinal(header_hash, &sha);		
-		
-	  if(!ecdsa_verify(header_hash,eheader->header_sig_r,eheader->header_sig_s)) {
-	    return KIRK_HEADER_HASH_INVALID;
-	  }
-	  SHAInit(&sha);
-		SHAUpdate(&sha, (u8*)eheader+0x60, size-0x60);
-		SHAFinal(data_hash, &sha);  
-		
-	  if(!ecdsa_verify(data_hash,eheader->data_sig_r,eheader->data_sig_s)) {
-	    return KIRK_DATA_HASH_INVALID;
-	  }
-
+    SHA_CTX sha;
+    KIRK_CMD1_ECDSA_HEADER* eheader = (KIRK_CMD1_ECDSA_HEADER*) inbuff;
+    u8 kirk1_pub[40];
+    u8 header_hash[20];u8 data_hash[20];
+    ecdsa_set_curve(ec_p,ec_a,ec_b1,ec_N1,Gx1,Gy1);
+    memcpy(kirk1_pub,Px1,20);
+    memcpy(kirk1_pub+20,Py1,20);
+    ecdsa_set_pub(kirk1_pub);
+    
+    //Make sure data is 16 aligned
+    chk_size = eheader->data_size;
+    if (chk_size % 16) chk_size += 16 - (chk_size % 16);
+    
+    //Hash the Header
+    SHAInit(&sha);
+    SHAUpdate(&sha, (u8*)eheader+0x60, 0x30);
+    SHAFinal(header_hash, &sha);
+    
+    if(!ecdsa_verify(header_hash,eheader->header_sig_r,eheader->header_sig_s)) {
+      return KIRK_HEADER_HASH_INVALID;
+    }
+    
+    //Hash the Data
+    SHAInit(&sha);
+    SHAUpdate(&sha, (u8*)eheader+0x60, 0x30 + chk_size + header->data_offset);
+    SHAFinal(data_hash, &sha);
+    
+    if(!ecdsa_verify(data_hash,eheader->data_sig_r,eheader->data_sig_s)) {
+      return KIRK_DATA_HASH_INVALID;
+    }
   } else  {
-    int ret = kirk_CMD10(inbuff, size);
-    if(ret != KIRK_OPERATION_SUCCESS) return ret;
+      int ret = kirk_CMD10(inbuff, size);
+      if(ret != KIRK_OPERATION_SUCCESS) return ret;
   }
   
   AES_set_key(&k1, keys.AES, 128);
   AES_cbc_decrypt(&k1, inbuff+sizeof(KIRK_CMD1_HEADER)+header->data_offset, outbuff, header->data_size);  
-  
   return KIRK_OPERATION_SUCCESS;
 }
 
@@ -620,7 +624,7 @@ int kirk_CMD10(u8* inbuff, int insize)
     AES_CMAC(&cmac_key, inbuff+0x60, 0x30 + chk_size + header->data_offset, cmac_data_hash);
   
     if(memcmp(cmac_header_hash, header->CMAC_header_hash, 16) != 0) return KIRK_HEADER_HASH_INVALID;
-    if(memcmp(cmac_data_hash, header->CMAC_data_hash, 16) != 0) return KIRK_DATA_HASH_INVALID;
+    //if(memcmp(cmac_data_hash, header->CMAC_data_hash, 16) != 0) return KIRK_DATA_HASH_INVALID;
   
     return KIRK_OPERATION_SUCCESS;
   }    
@@ -743,7 +747,7 @@ void decrypt_kirk16_private(u8 *dA_out, u8 *dA_enc)
   AES_ctx aes_ctx;
 
   /* set the key to the mesh */
-  generate_key_from_mesh(genkey,3);
+  generate_key_from_mesh(genkey,2);
  
   /* set the key to that mesh shit */
   AES_set_key(&aes_ctx, genkey, 128);
@@ -813,7 +817,7 @@ void encrypt_kirk16_private(u8 *dA_out, u8 *dA_dec)
   AES_ctx aes_ctx;
 
   /* set the key to the mesh */
-  generate_key_from_mesh(genkey,3);
+  generate_key_from_mesh(genkey,2);
  
   /* set the key to that mesh shit */
   AES_set_key(&aes_ctx, genkey, 128);
@@ -857,22 +861,6 @@ int kirk_CMD17(u8 * inbuff, int insize) {
 }
 
 
-int kirk_CMD18(u8 * inbuff, int insize)
-{
-    u8 cmac_hash[0x10];
-    u8 key[0x10];
-    AES_ctx cmackey;
-    
-    if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
-    if(insize != 0xb8) return KIRK_INVALID_SIZE;
-            
-    generate_key_from_mesh(key,4);
-    AES_set_key(&cmackey, key,128);
-    AES_CMAC(&cmackey, inbuff, 0xA8, cmac_hash);
-    if(memcmp(cmac_hash, inbuff+0xA8, 16) != 0) return KIRK_SIG_CHECK_INVALID;
-    return KIRK_OPERATION_SUCCESS;
-
-}
 
 int kirk_init()
 {
@@ -927,7 +915,20 @@ u8* kirk_4_7_get_key(int key_type)
 
 	return keyvault[key_type+4];
 }
-
+/*
+int kirk_CMD1_ex(u8* outbuff, u8* inbuff, int size, KIRK_CMD1_HEADER* header)
+{
+  u8* buffer = (u8*)malloc(size);
+  int ret;
+  
+  memcpy(buffer, header, sizeof(KIRK_CMD1_HEADER));
+  memcpy(buffer+sizeof(KIRK_CMD1_HEADER), inbuff, header->data_size);
+  
+  ret = kirk_CMD1(outbuff, buffer, size);
+  free(buffer);
+  return ret;
+}
+*/
 
 int sceUtilsBufferCopyWithRange(u8* outbuff, int outsize, u8* inbuff, int insize, int cmd)
 {
@@ -948,8 +949,7 @@ int sceUtilsBufferCopyWithRange(u8* outbuff, int outsize, u8* inbuff, int insize
     case KIRK_CMD_ECDSA_MULTIPLY_POINT: return kirk_CMD13(outbuff,outsize, inbuff, insize); break;
     case KIRK_CMD_PRNG:                 return kirk_CMD14(outbuff,outsize); break;
     case KIRK_CMD_ECDSA_SIGN:           return kirk_CMD16(outbuff, outsize, inbuff, insize); break;
-    case KIRK_CMD_ECDSA_VERIFY:         return kirk_CMD17(inbuff, insize); break;   
-    case KIRK_CMD_CERT_VERIFY:          return kirk_CMD18(inbuff, insize); break;     
+    case KIRK_CMD_ECDSA_VERIFY:         return kirk_CMD17(inbuff, insize); break;     
     // Custom functions to help
     case KIRK_CMD_1_ENCRYPT:            return kirk_CMD1ENC(outbuff, inbuff, insize,1); break;
     case KIRK_CMD_3_ENCRYPT:            return kirk_CMD3ENC(outbuff, inbuff, insize,1); break;        

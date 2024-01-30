@@ -344,6 +344,7 @@ int kirk_CMD1(u8* outbuff, u8* inbuff, int size)
   KIRK_CMD1_HEADER* header = (KIRK_CMD1_HEADER*)inbuff;
   header_keys keys; //0-15 AES key, 16-31 CMAC key
   AES_ctx k1;
+  int chk_size;
 	
 	if(size < 0x90) return KIRK_INVALID_SIZE;
   if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;

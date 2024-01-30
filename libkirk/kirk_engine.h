@@ -215,24 +215,24 @@ typedef struct
 */
 
 //kirk-like funcs
-int kirk_CMD0(u8* outbuff, u8* inbuff, int size);
-int kirk_CMD1(u8* outbuff, u8* inbuff, int size);
-int kirk_CMD3(u8* outbuff, u8* inbuff, int size);
+int kirk_CMD0(u8* outbuff, u8* inbuff);
+int kirk_CMD1(u8* outbuff, u8* inbuff);
+int kirk_CMD3(u8* outbuff, u8* inbuff);
 
-int kirk_CMD4(u8* outbuff, u8* inbuff, int size);
-int kirk_CMD5(u8* outbuff, u8* inbuff, int size);
-int kirk_CMD6(u8* outbuff, u8* inbuff, int size);
-int kirk_CMD7(u8* outbuff, u8* inbuff, int size);
-int kirk_CMD8(u8* outbuff, u8* inbuff, int size);
-int kirk_CMD9(u8* outbuff, u8* inbuff, int size);
-int kirk_CMD10(u8* inbuff, int insize);
-int kirk_CMD11(u8* outbuff, u8* inbuff, int size);
-int kirk_CMD12(u8* outbuff, int outsize);
-int kirk_CMD13(u8* outbuff, int outsize,u8* inbuff, int insize);
-int kirk_CMD14(u8* outbuff, int outsize);
-int kirk_CMD16(u8* outbuff, int outsize,u8* inbuff, int insize);
-int kirk_CMD17(u8* inbuff, int insize);
-
+int kirk_CMD4(u8* outbuff, u8* inbuff);
+int kirk_CMD5(u8* outbuff, u8* inbuff);
+int kirk_CMD6(u8* outbuff, u8* inbuff);
+int kirk_CMD7(u8* outbuff, u8* inbuff);
+int kirk_CMD8(u8* outbuff, u8* inbuff);
+int kirk_CMD9(u8* outbuff, u8* inbuff);
+int kirk_CMD10(u8* inbuff);
+int kirk_CMD11(u8* outbuff, u8* inbuff);
+int kirk_CMD12(u8* outbuff);
+int kirk_CMD13(u8* outbuff,u8* inbuff);
+int kirk_CMD14(u8* outbuff);
+int kirk_CMD16(u8* outbuff,u8* inbuff);
+int kirk_CMD17(u8* inbuff);
+int kirk_CMD18(u8* inbuff);
 int kirk_CMD1ENC(u8* outbuff, u8* inbuff, int size, int generate_trash);
 int kirk_CMD3ENC(u8* outbuff, u8* inbuff, int size, int generate_trash);
 
@@ -242,8 +242,6 @@ int kirk_init2(u8 *, u32, u32, u32);
 //helper funcs
 u8* kirk_4_7_get_key(int key_type);
 
-//kirk "ex" functions
-int kirk_CMD1_ex(u8* outbuff, u8* inbuff, int size, KIRK_CMD1_HEADER* header);
 
 //sce-like funcs
 int sceUtilsSetFuseID(u8*fuse);

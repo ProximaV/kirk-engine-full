@@ -53,7 +53,7 @@ int DecryptIplBlock(void *dst, const void *src)
 #ifdef DEBUG
 	PrintKIRK1Header((void*)src);
 #endif
-    int ret = kirk_CMD1(dst, (void*)src, 0x1000);
+    int ret = kirk_CMD1(dst, (void*)src);
     if(ret == KIRK_NOT_ENABLED){ printf("KIRK not enabled!\n"); return -1;}
     else if(ret == KIRK_INVALID_MODE){ printf("Mode in header not CMD1\n"); return -1;}
     else if(ret == KIRK_HEADER_HASH_INVALID){ printf("header hash check failed\n"); return -1;}
@@ -126,7 +126,7 @@ int main(int argc, char* argv[])
     
     //init KIRK crypto engine
     kirk_init(); 
-    int result=kirk_CMD1(myipl, (void*)myipl, size_enc); 
+    int result=kirk_CMD1(myipl, (void*)myipl); 
 	printf("Kirk1 returned 0x%08x\n", result);
     FILE *out = fopen(argv[2], "wb");
     fwrite(myipl, size_enc, 1, out);

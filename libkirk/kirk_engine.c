@@ -205,8 +205,8 @@ static u8 Py1[20] = {0x04, 0x9D, 0xF1, 0xA0, 0x75, 0xC0, 0xE0, 0x4F, 0xB3, 0x44,
 
 typedef struct header_keys
 {
-  u8 AES[16];
-  u8 CMAC[16];
+    u8 AES[16];
+    u8 CMAC[16];
 }header_keys;  //small struct for temporary keeping AES & CMAC key from CMD1 header
 
 
@@ -228,85 +228,119 @@ char is_kirk_initialized; //"init" emulation
 // Custom Encryption functions (not part of real KIRK)
 int kirk_CMD1ENC(u8* outbuff, u8* inbuff, int size, int generate_trash)
 {
-  KIRK_CMD1_HEADER* header = (KIRK_CMD1_HEADER*)outbuff;
-  header_keys *keys = (header_keys *)outbuff; //0-15 AES key, 16-31 CMAC key
-  int chk_size;
-  AES_ctx k1;
-  AES_ctx cmac_key;
-  u8 cmac_header_hash[16];
-  u8 cmac_data_hash[16];
-    
-  if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+    KIRK_CMD1_HEADER* header = (KIRK_CMD1_HEADER*)outbuff;
+    header_keys *keys = (header_keys *)outbuff; //0-15 AES key, 16-31 CMAC key
+    int chk_size;
+    AES_ctx k1;
+    AES_ctx cmac_key;
+    u8 cmac_header_hash[16];
+    u8 cmac_data_hash[16];
 
-  memcpy(outbuff, inbuff, size);
-   
-  if(header->mode != KIRK_MODE_CMD1) return KIRK_INVALID_MODE;
-  
-  //FILL PREDATA WITH RANDOM DATA
-  if(generate_trash) kirk_CMD14(outbuff+sizeof(KIRK_CMD1_HEADER), header->data_offset);
-  
-  //Make sure data is 16 aligned
-  chk_size = header->data_size;
-  if(chk_size % 16) chk_size += 16 - (chk_size % 16);
-  
-  //ENCRYPT DATA
-  AES_set_key(&k1, keys->AES, 128);
-  AES_cbc_encrypt(&k1, inbuff+sizeof(KIRK_CMD1_HEADER)+header->data_offset, (u8*)outbuff+sizeof(KIRK_CMD1_HEADER)+header->data_offset, chk_size);
-  
-  //CMAC HASHES
-  AES_set_key(&cmac_key, keys->CMAC, 128);
-  AES_CMAC(&cmac_key, outbuff+0x60, 0x30, cmac_header_hash);
-  AES_CMAC(&cmac_key, outbuff+0x60, 0x30 + chk_size + header->data_offset, cmac_data_hash);
-  
-  memcpy(header->CMAC_header_hash, cmac_header_hash, 16);
-  memcpy(header->CMAC_data_hash, cmac_data_hash, 16);
-  
-  //ENCRYPT KEYS
-  AES_cbc_encrypt(&aes_kirk1, inbuff, outbuff, 16*2);
-  return KIRK_OPERATION_SUCCESS;
+    if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+
+    memcpy(outbuff, inbuff, size);
+
+    if(header->mode != KIRK_MODE_CMD1) return KIRK_INVALID_MODE;
+
+    //FILL PREDATA WITH RANDOM DATA
+    if(generate_trash)
+    {
+        int fillsize= header->data_offset;
+        int i=0;
+        u8 temp[0x14];
+        while(fillsize >0x14)
+        {
+            kirk_CMD14(temp);
+            memcpy(outbuff+sizeof(KIRK_CMD1_HEADER)+i,temp,0x14);
+            fillsize -= 0x14;
+            i+=0x14;
+        }
+        if (fillsize > 0)
+        {
+            kirk_CMD14(temp);
+            memcpy(outbuff+sizeof(KIRK_CMD1_HEADER)+i,temp,fillsize);
+        }
+    }
+
+    //Make sure data is 16 aligned
+    chk_size = header->data_size;
+    if(chk_size % 16) chk_size += 16 - (chk_size % 16);
+
+    //ENCRYPT DATA
+    AES_set_key(&k1, keys->AES, 128);
+    AES_cbc_encrypt(&k1, inbuff+sizeof(KIRK_CMD1_HEADER)+header->data_offset, (u8*)outbuff+sizeof(KIRK_CMD1_HEADER)+header->data_offset, chk_size);
+
+    //CMAC HASHES
+    AES_set_key(&cmac_key, keys->CMAC, 128);
+    AES_CMAC(&cmac_key, outbuff+0x60, 0x30, cmac_header_hash);
+    AES_CMAC(&cmac_key, outbuff+0x60, 0x30 + chk_size + header->data_offset, cmac_data_hash);
+
+    memcpy(header->CMAC_header_hash, cmac_header_hash, 16);
+    memcpy(header->CMAC_data_hash, cmac_data_hash, 16);
+
+    //ENCRYPT KEYS
+    AES_cbc_encrypt(&aes_kirk1, inbuff, outbuff, 16*2);
+    return KIRK_OPERATION_SUCCESS;
 }
 
 int kirk_CMD3ENC(u8* outbuff, u8* inbuff, int size, int generate_trash)
 {
-  KIRK_CMD1_HEADER* header = (KIRK_CMD1_HEADER*)outbuff;
-  header_keys *keys = (header_keys *)outbuff; //0-15 AES key, 16-31 CMAC key
-  int chk_size;
-  AES_ctx k1;
-  AES_ctx cmac_key;
-  u8 cmac_header_hash[16];
-  u8 cmac_data_hash[16];
-  u8 genkey[16];
-    
-  if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+    KIRK_CMD1_HEADER* header = (KIRK_CMD1_HEADER*)outbuff;
+    header_keys *keys = (header_keys *)outbuff; //0-15 AES key, 16-31 CMAC key
+    int chk_size;
+    AES_ctx k1;
+    AES_ctx cmac_key;
+    u8 cmac_header_hash[16];
+    u8 cmac_data_hash[16];
+    u8 genkey[16];
 
-  memcpy(outbuff, inbuff, size);
-   
-  if(header->mode != KIRK_MODE_CMD3) return KIRK_INVALID_MODE;
-  
-  //FILL PREDATA WITH RANDOM DATA
-  if(generate_trash) kirk_CMD14(outbuff+sizeof(KIRK_CMD1_HEADER), header->data_offset);
-  
-  //Make sure data is 16 aligned
-  chk_size = header->data_size;
-  if(chk_size % 16) chk_size += 16 - (chk_size % 16);
-  
-  //ENCRYPT DATA
-  AES_set_key(&k1, keys->AES, 128);
-  AES_cbc_encrypt(&k1, inbuff+sizeof(KIRK_CMD1_HEADER)+header->data_offset, (u8*)outbuff+sizeof(KIRK_CMD1_HEADER)+header->data_offset, chk_size);
-  
-  //CMAC HASHES
-  AES_set_key(&cmac_key, keys->CMAC, 128);
-  AES_CMAC(&cmac_key, outbuff+0x60, 0x30, cmac_header_hash);
-  AES_CMAC(&cmac_key, outbuff+0x60, 0x30 + chk_size + header->data_offset, cmac_data_hash);
-  
-  memcpy(header->CMAC_header_hash, cmac_header_hash, 16);
-  memcpy(header->CMAC_data_hash, cmac_data_hash, 16);
-  
-  //ENCRYPT KEYS
-  generate_key_from_mesh(genkey,0);
-  AES_set_key(&k1,genkey,128);
-  AES_cbc_encrypt(&k1, inbuff, outbuff, 16*2);
-  return KIRK_OPERATION_SUCCESS;
+    if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+
+    memcpy(outbuff, inbuff, size);
+
+    if(header->mode != KIRK_MODE_CMD3) return KIRK_INVALID_MODE;
+
+    //FILL PREDATA WITH RANDOM DATA
+    if(generate_trash)
+    {
+        int fillsize= header->data_offset;
+        int i=0;
+        u8 temp[0x14];
+        while(fillsize >0x14)
+        {
+            kirk_CMD14(temp);
+            memcpy(outbuff+sizeof(KIRK_CMD1_HEADER)+i,temp,0x14);
+            fillsize -= 0x14;
+            i+=0x14;
+        }
+        if (fillsize > 0)
+        {
+            kirk_CMD14(temp);
+            memcpy(outbuff+sizeof(KIRK_CMD1_HEADER)+i,temp,fillsize);
+        }
+    }
+
+    //Make sure data is 16 aligned
+    chk_size = header->data_size;
+    if(chk_size % 16) chk_size += 16 - (chk_size % 16);
+
+    //ENCRYPT DATA
+    AES_set_key(&k1, keys->AES, 128);
+    AES_cbc_encrypt(&k1, inbuff+sizeof(KIRK_CMD1_HEADER)+header->data_offset, (u8*)outbuff+sizeof(KIRK_CMD1_HEADER)+header->data_offset, chk_size);
+
+    //CMAC HASHES
+    AES_set_key(&cmac_key, keys->CMAC, 128);
+    AES_CMAC(&cmac_key, outbuff+0x60, 0x30, cmac_header_hash);
+    AES_CMAC(&cmac_key, outbuff+0x60, 0x30 + chk_size + header->data_offset, cmac_data_hash);
+
+    memcpy(header->CMAC_header_hash, cmac_header_hash, 16);
+    memcpy(header->CMAC_data_hash, cmac_data_hash, 16);
+
+    //ENCRYPT KEYS
+    generate_key_from_mesh(genkey,0);
+    AES_set_key(&k1,genkey,128);
+    AES_cbc_encrypt(&k1, inbuff, outbuff, 16*2);
+    return KIRK_OPERATION_SUCCESS;
 }
 
 // Standard KIRK functions
@@ -321,7 +355,7 @@ int kirk_CMD3ENC(u8* outbuff, u8* inbuff, int size, int generate_trash)
  These use key slots 0 and 1 which are currently unknown
 */
 
-int kirk_CMD0(u8* outbuff, u8* inbuff, int size)
+int kirk_CMD0(u8* outbuff, u8* inbuff)
 {
     
     // Since the KEYS are empty this will not work yet but is structurally correct.
@@ -329,134 +363,146 @@ int kirk_CMD0(u8* outbuff, u8* inbuff, int size)
     AES_ctx cmackey;
     AES_ctx bodykey;
     u8 cmachash[0x10];
-    
+
     AES_set_key(&cmackey,keyvault[1],128);
     AES_set_key(&bodykey,keyvault[0],128);
     AES_CMAC(&cmackey, inbuff+sizeof(KIRK_KBOOTI_HEADER), header->length, cmachash);
     if(memcmp(cmachash, header->cmac, 16) != 0) return KIRK_NOT_ENABLED; // yeah this is not right, but it does return 1 in this case
+    
     AES_cbc_decrypt(&bodykey, inbuff+sizeof(KIRK_KBOOTI_HEADER), outbuff, header->length);
     return KIRK_OPERATION_SUCCESS;
     
 }
 
-int kirk_CMD1(u8* outbuff, u8* inbuff, int size)
+int kirk_CMD1(u8* outbuff, u8* inbuff)
 {
-  KIRK_CMD1_HEADER* header = (KIRK_CMD1_HEADER*)inbuff;
-  header_keys keys; //0-15 AES key, 16-31 CMAC key
-  AES_ctx k1;
-	
-	if(size < 0x90) return KIRK_INVALID_SIZE;
-  if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
-  if(header->mode != KIRK_MODE_CMD1) return KIRK_INVALID_MODE;
-  
-  AES_cbc_decrypt(&aes_kirk1, inbuff, (u8*)&keys, 16*2); //decrypt AES & CMAC key to temp buffer
-  
-  if(header->ecdsa_hash == 1)
-  {
-  	SHA_CTX sha;
-  	KIRK_CMD1_ECDSA_HEADER* eheader = (KIRK_CMD1_ECDSA_HEADER*) inbuff;
-  	u8 kirk1_pub[40];
-  	u8 header_hash[20];u8 data_hash[20];
-  	ecdsa_set_curve(ec_p,ec_a,ec_b1,ec_N1,Gx1,Gy1);
-  	memcpy(kirk1_pub,Px1,20);
-  	memcpy(kirk1_pub+20,Py1,20);
-  	ecdsa_set_pub(kirk1_pub);
-		//Hash the Header
-		SHAInit(&sha);
-		SHAUpdate(&sha, (u8*)eheader+0x60, 0x30);
-		SHAFinal(header_hash, &sha);		
-		
-	  if(!ecdsa_verify(header_hash,eheader->header_sig_r,eheader->header_sig_s)) {
-	    return KIRK_HEADER_HASH_INVALID;
-	  }
-	  SHAInit(&sha);
-		SHAUpdate(&sha, (u8*)eheader+0x60, size-0x60);
-		SHAFinal(data_hash, &sha);  
-		
-	  if(!ecdsa_verify(data_hash,eheader->data_sig_r,eheader->data_sig_s)) {
-	    return KIRK_DATA_HASH_INVALID;
-	  }
+    KIRK_CMD1_HEADER* header = (KIRK_CMD1_HEADER*)inbuff;
+    header_keys keys; //0-15 AES key, 16-31 CMAC key
+    AES_ctx k1;
+    int chk_size;
+    
+    if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+    if(header->mode != KIRK_MODE_CMD1) return KIRK_INVALID_MODE;
 
-  } else  {
-    int ret = kirk_CMD10(inbuff, size);
-    if(ret != KIRK_OPERATION_SUCCESS) return ret;
-  }
-  
-  AES_set_key(&k1, keys.AES, 128);
-  AES_cbc_decrypt(&k1, inbuff+sizeof(KIRK_CMD1_HEADER)+header->data_offset, outbuff, header->data_size);  
-  
-  return KIRK_OPERATION_SUCCESS;
+    AES_cbc_decrypt(&aes_kirk1, inbuff, (u8*)&keys, 16*2); //decrypt AES & CMAC key to temp buffer
+
+    if(header->ecdsa_hash == 1)
+    {
+        SHA_CTX sha;
+        KIRK_CMD1_ECDSA_HEADER* eheader = (KIRK_CMD1_ECDSA_HEADER*) inbuff;
+        u8 kirk1_pub[40];
+        u8 header_hash[20];u8 data_hash[20];
+        ecdsa_set_curve(ec_p,ec_a,ec_b1,ec_N1,Gx1,Gy1);
+        memcpy(kirk1_pub,Px1,20);
+        memcpy(kirk1_pub+20,Py1,20);
+        ecdsa_set_pub(kirk1_pub);
+        
+        //Make sure data is 16 aligned
+        chk_size = eheader->data_size;
+        if (chk_size % 16) chk_size += 16 - (chk_size % 16);
+
+        //Hash the Header
+        SHAInit(&sha);
+        SHAUpdate(&sha, (u8*)eheader+0x60, 0x30);
+        SHAFinal(header_hash, &sha);		
+
+        if(!ecdsa_verify(header_hash,eheader->header_sig_r,eheader->header_sig_s))
+        {
+            return KIRK_HEADER_HASH_INVALID;
+        }
+        SHAInit(&sha);
+        SHAUpdate(&sha, (u8*)eheader+0x60, 0x30 + chk_size + header->data_offset);
+        SHAFinal(data_hash, &sha);  
+
+        if(!ecdsa_verify(data_hash,eheader->data_sig_r,eheader->data_sig_s))
+        {
+            return KIRK_DATA_HASH_INVALID;
+        }
+
+    }
+    else
+    {
+        int ret = kirk_CMD10(inbuff);
+        if(ret != KIRK_OPERATION_SUCCESS) return ret;
+    }
+
+    AES_set_key(&k1, keys.AES, 128);
+    AES_cbc_decrypt(&k1, inbuff+sizeof(KIRK_CMD1_HEADER)+header->data_offset, outbuff, header->data_size);  
+
+    return KIRK_OPERATION_SUCCESS;
 }
 
-int kirk_CMD3(u8* outbuff, u8* inbuff, int size)
+int kirk_CMD3(u8* outbuff, u8* inbuff)
 {
-  KIRK_CMD1_HEADER* header = (KIRK_CMD1_HEADER*)inbuff;
-  header_keys keys; //0-15 AES key, 16-31 CMAC key
-  AES_ctx k1;
-  u8 genkey[0x10];
-	
-	if(size < 0x90) return KIRK_INVALID_SIZE;
-  if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
-  if(header->mode != KIRK_MODE_CMD3) return KIRK_INVALID_MODE;
-  
-  // Generate per console key
-  generate_key_from_mesh(genkey,0);
-  AES_set_key(&k1, genkey,128);
-  AES_cbc_decrypt(&k1, inbuff, (u8*)&keys, 16*2); //decrypt AES & CMAC key to temp buffer
-  
-  if(header->ecdsa_hash == 1)
-  {
+    KIRK_CMD1_HEADER* header = (KIRK_CMD1_HEADER*)inbuff;
+    header_keys keys; //0-15 AES key, 16-31 CMAC key
+    AES_ctx k1;
+    u8 genkey[0x10];
+
+
+    if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+    if(header->mode != KIRK_MODE_CMD3) return KIRK_INVALID_MODE;
+
+    // Generate per console key
+    generate_key_from_mesh(genkey,0);
+    AES_set_key(&k1, genkey,128);
+    AES_cbc_decrypt(&k1, inbuff, (u8*)&keys, 16*2); //decrypt AES & CMAC key to temp buffer
+
+    if(header->ecdsa_hash == 1)
+    {
     // ECDSA variants of KIRK3 are not supported yet
-    return KIRK_INVALID_MODE;
+        return KIRK_INVALID_MODE;
 
-  } else  {
-    int ret = kirk_CMD10(inbuff, size);
-    if(ret != KIRK_OPERATION_SUCCESS) return ret;
-  }
-  
-  AES_set_key(&k1, keys.AES, 128);
-  AES_cbc_decrypt(&k1, inbuff+sizeof(KIRK_CMD1_HEADER)+header->data_offset, outbuff, header->data_size);  
-  
-  return KIRK_OPERATION_SUCCESS;
+    }
+    else
+    {
+        int ret = kirk_CMD10(inbuff);
+        if(ret != KIRK_OPERATION_SUCCESS) return ret;
+    }
+
+    AES_set_key(&k1, keys.AES, 128);
+    AES_cbc_decrypt(&k1, inbuff+sizeof(KIRK_CMD1_HEADER)+header->data_offset, outbuff, header->data_size);  
+
+    return KIRK_OPERATION_SUCCESS;
 }
 
-int kirk_CMD4(u8* outbuff, u8* inbuff, int size)
+int kirk_CMD4(u8* outbuff, u8* inbuff)
 {
-  KIRK_AES128CBC_HEADER *header = (KIRK_AES128CBC_HEADER*)inbuff;
-  u8* key;
-  AES_ctx aesKey;
-  
-  if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
-  if(header->mode != KIRK_MODE_ENCRYPT_CBC) return KIRK_INVALID_MODE;
-  if(header->data_size == 0) return KIRK_DATA_SIZE_ZERO;
-  
-  key = kirk_4_7_get_key(header->keyseed);
-  if(key == (u8*)KIRK_INVALID_SIZE) return KIRK_INVALID_SIZE;
-  
-  //Set the key
-  AES_set_key(&aesKey, key, 128);
-  AES_cbc_encrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_HEADER), outbuff+sizeof(KIRK_AES128CBC_HEADER), size);
-  
-  return KIRK_OPERATION_SUCCESS;
+    KIRK_AES128CBC_HEADER *header = (KIRK_AES128CBC_HEADER*)inbuff;
+    u8* key;
+    AES_ctx aesKey;
+
+    if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+    if(header->mode != KIRK_MODE_ENCRYPT_CBC) return KIRK_INVALID_MODE;
+    if(header->data_size == 0) return KIRK_DATA_SIZE_ZERO;
+
+    key = kirk_4_7_get_key(header->keyseed);
+    if(key == (u8*)KIRK_INVALID_SIZE) return KIRK_INVALID_SIZE;
+
+    //Set the key
+    AES_set_key(&aesKey, key, 128);
+    AES_cbc_encrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_HEADER), outbuff+sizeof(KIRK_AES128CBC_HEADER), header->data_size);
+
+    return KIRK_OPERATION_SUCCESS;
 }
-int kirk_CMD5(u8* outbuff, u8* inbuff, int size)
+int kirk_CMD5(u8* outbuff, u8* inbuff)
 {
-  KIRK_AES128CBC_HEADER *header = (KIRK_AES128CBC_HEADER*)inbuff;
-  u8 key[0x10];
-  AES_ctx aesKey;
-  
-  if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
-  if(header->mode != KIRK_MODE_ENCRYPT_CBC) return KIRK_INVALID_MODE;
-  if(header->keyseed != 0x100) return KIRK_INVALID_MODE;
-  if(header->data_size == 0) return KIRK_DATA_SIZE_ZERO;
-  
-  generate_key_from_mesh(key,1);
-  //hex_dump("key5", key,0x10);
-  //Set the key
-  AES_set_key(&aesKey, key, 128);
-  AES_cbc_encrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_HEADER), outbuff+sizeof(KIRK_AES128CBC_HEADER), size);
-  
-  return KIRK_OPERATION_SUCCESS;
+    KIRK_AES128CBC_HEADER *header = (KIRK_AES128CBC_HEADER*)inbuff;
+    u8 key[0x10];
+    AES_ctx aesKey;
+
+    if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+    if(header->mode != KIRK_MODE_ENCRYPT_CBC) return KIRK_INVALID_MODE;
+    if(header->keyseed != 0x100) return KIRK_INVALID_MODE;
+    if(header->data_size == 0) return KIRK_DATA_SIZE_ZERO;
+
+    generate_key_from_mesh(key,1);
+    //hex_dump("key5", key,0x10);
+    //Set the key
+    AES_set_key(&aesKey, key, 128);
+    AES_cbc_encrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_HEADER), outbuff+sizeof(KIRK_AES128CBC_HEADER), header->data_size);
+
+    return KIRK_OPERATION_SUCCESS;
 }
 /*
 1. encrypt mesh 0 with mesh 2, twice (param 2)
@@ -466,255 +512,234 @@ int kirk_CMD5(u8* outbuff, u8* inbuff, int size)
 5. Add step 3 key to data payload +0
 */
 
-int kirk_CMD6(u8* outbuff, u8* inbuff, int size)
+int kirk_CMD6(u8* outbuff, u8* inbuff)
 {
-  KIRK_AES128CBC_USER_HEADER *header = (KIRK_AES128CBC_USER_HEADER*)inbuff;
-  u8 key[0x10];
-  u8 keyseed[0x10];
-  u8 userkey[0x10];
-  u8 randbuf[0x14];
-  
-  AES_ctx aesKey;
-  
-  if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
-  if(header->mode != KIRK_MODE_ENCRYPT_CBC) return KIRK_INVALID_MODE;
-  if(header->keyseed != 0x200) return KIRK_INVALID_MODE;
-  if(header->data_size == 0) return KIRK_DATA_SIZE_ZERO;
-  
-  generate_key_from_mesh(key,2);
-  memcpy(userkey, header->userkey, 0x10);
-  //Set the key
-  AES_set_key(&aesKey, key, 128);
-  kirk_CMD14(randbuf,0x14);
-  AES_encrypt(&aesKey, randbuf,keyseed); // Encrypt random with Genkey 2
-  AES_set_key(&aesKey, userkey, 128);
-  AES_encrypt(&aesKey, randbuf,key);
-  AES_set_key(&aesKey, key,128);
-  outbuff[0] = 5;
-  //hex_dump("key6", key,0x10);
-  
-  
-  AES_cbc_encrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_USER_HEADER), outbuff+sizeof(KIRK_AES128CBC_USER_HEADER)+0x10, size);
-  memcpy(outbuff+sizeof(KIRK_AES128CBC_USER_HEADER),keyseed,0x10); // copy out the encrypted random val
-  
-  return KIRK_OPERATION_SUCCESS;
-}
+    KIRK_AES128CBC_USER_HEADER *header = (KIRK_AES128CBC_USER_HEADER*)inbuff;
+    u8 key[0x10];
+    u8 keyseed[0x10];
+    u8 userkey[0x10];
+    u8 randbuf[0x14];
+
+    AES_ctx aesKey;
+
+    if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+    if(header->mode != KIRK_MODE_ENCRYPT_CBC) return KIRK_INVALID_MODE;
+    if(header->keyseed != 0x200) return KIRK_INVALID_MODE;
+    if(header->data_size == 0) return KIRK_DATA_SIZE_ZERO;
+
+    generate_key_from_mesh(key,2);
+    memcpy(userkey, header->userkey, 0x10);
+    //Set the key
+    AES_set_key(&aesKey, key, 128);
+    kirk_CMD14(randbuf);
+    AES_encrypt(&aesKey, randbuf,keyseed); // Encrypt random with Genkey 2
+    AES_set_key(&aesKey, userkey, 128);
+    AES_encrypt(&aesKey, randbuf,key);
+    AES_set_key(&aesKey, key,128);
+    outbuff[0] = 5;
+    //hex_dump("key6", key,0x10);
 
 
-int kirk_CMD7(u8* outbuff, u8* inbuff, int size)
-{
-  KIRK_AES128CBC_HEADER *header = (KIRK_AES128CBC_HEADER*)inbuff;
-  u8* key;
-  AES_ctx aesKey;
-  
-  if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
-  if(header->mode != KIRK_MODE_DECRYPT_CBC) return KIRK_INVALID_MODE;
-  if(header->data_size == 0) return KIRK_DATA_SIZE_ZERO;
-  
-  key = kirk_4_7_get_key(header->keyseed);
-  if(key == (u8*)KIRK_INVALID_SIZE) return KIRK_INVALID_SIZE;
-  
-  //Set the key
-  AES_set_key(&aesKey, key, 128);
-  AES_cbc_decrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_HEADER), outbuff, size);
-  
-  return KIRK_OPERATION_SUCCESS;
-}
+    AES_cbc_encrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_USER_HEADER), outbuff+sizeof(KIRK_AES128CBC_USER_HEADER)+0x10, header->data_size);
+    memcpy(outbuff+sizeof(KIRK_AES128CBC_USER_HEADER),keyseed,0x10); // copy out the encrypted random val
 
-int kirk_CMD8(u8* outbuff, u8* inbuff, int size)
-{
-  KIRK_AES128CBC_HEADER *header = (KIRK_AES128CBC_HEADER*)inbuff;
-  u8 key[0x10];
-  AES_ctx aesKey;
-  
-  if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
-  if(header->mode != KIRK_MODE_DECRYPT_CBC) return KIRK_INVALID_MODE;
-  if(header->keyseed != 0x100) return KIRK_INVALID_MODE;
-  if(header->data_size == 0) return KIRK_DATA_SIZE_ZERO;
-  
-  generate_key_from_mesh(key,1);
-  //hex_dump("key8", key,0x10);
-  //Set the key
-  AES_set_key(&aesKey, key, 128);
-  AES_cbc_decrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_HEADER), outbuff, size);
-  
-  return KIRK_OPERATION_SUCCESS;
-}
-
-int kirk_CMD9(u8* outbuff, u8* inbuff, int size)
-{
-  KIRK_AES128CBC_USER_HEADER *header = (KIRK_AES128CBC_USER_HEADER*)inbuff;
-  u8 key[0x10];
-  u8 keyseed[0x10];
-  u8 userkey[0x10];
-  
-  AES_ctx aesKey;
-  
-  if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
-  if(header->mode != KIRK_MODE_DECRYPT_CBC) return KIRK_INVALID_MODE;
-  if(header->keyseed != 0x200) return KIRK_INVALID_MODE;
-  if(header->data_size == 0) return KIRK_DATA_SIZE_ZERO;
-  
-  generate_key_from_mesh(key,2);
-  memcpy(userkey, header->userkey, 0x10);
-  //Set the key
-  AES_set_key(&aesKey, key, 128);
-  memcpy(keyseed,inbuff+sizeof(KIRK_AES128CBC_USER_HEADER), 0x10);
-  AES_decrypt(&aesKey, keyseed,keyseed);
-  AES_set_key(&aesKey, userkey, 128);
-  AES_encrypt(&aesKey, keyseed,key);
-  AES_set_key(&aesKey, key,128);
-  //hex_dump("key9", key,0x10);
-  //Set the key
-  AES_set_key(&aesKey, key, 128);
-  AES_cbc_decrypt(&aesKey, inbuff+0x34, outbuff, size);
-
-  
-  return KIRK_OPERATION_SUCCESS;
-}
-
-
-int kirk_CMD10(u8* inbuff, int insize)
-{
-  KIRK_CMD1_HEADER* header = (KIRK_CMD1_HEADER*)inbuff;
-  header_keys keys; //0-15 AES key, 16-31 CMAC key
-  u8 cmac_header_hash[16];
-  u8 cmac_data_hash[16];
-  AES_ctx cmac_key;
-  AES_ctx gen0;
-  int chk_size;
-  
-  if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
-  if(!(header->mode == KIRK_MODE_CMD1 || header->mode == KIRK_MODE_CMD2 || header->mode == KIRK_MODE_CMD3)) return KIRK_INVALID_MODE;
-  if(header->data_size == 0) return KIRK_DATA_SIZE_ZERO;
-  
-  if(header->mode == KIRK_MODE_CMD1)
-  {
-    AES_cbc_decrypt(&aes_kirk1, inbuff, (u8*)&keys, 32); //decrypt AES & CMAC key to temp buffer
-    AES_set_key(&cmac_key, keys.CMAC, 128);
-    AES_CMAC(&cmac_key, inbuff+0x60, 0x30, cmac_header_hash);
-  
-    //Make sure data is 16 aligned
-    chk_size = header->data_size;
-    if(chk_size % 16) chk_size += 16 - (chk_size % 16);
-    AES_CMAC(&cmac_key, inbuff+0x60, 0x30 + chk_size + header->data_offset, cmac_data_hash);
-  
-    if(memcmp(cmac_header_hash, header->CMAC_header_hash, 16) != 0) return KIRK_HEADER_HASH_INVALID;
-    if(memcmp(cmac_data_hash, header->CMAC_data_hash, 16) != 0) return KIRK_DATA_HASH_INVALID;
-  
     return KIRK_OPERATION_SUCCESS;
-  }
-    
-  if(header->mode == KIRK_MODE_CMD3)
-  {
-    u8 genkey[0x10];
-    generate_key_from_mesh(genkey,0);
-    AES_set_key(&gen0, genkey,128);
-    AES_cbc_decrypt(&gen0, inbuff, (u8*)&keys, 32); //decrypt AES & CMAC key to temp buffer
-    AES_set_key(&cmac_key, keys.CMAC, 128);
-    AES_CMAC(&cmac_key, inbuff+0x60, 0x30, cmac_header_hash);
-  
-    //Make sure data is 16 aligned
-    chk_size = header->data_size;
-    if(chk_size % 16) chk_size += 16 - (chk_size % 16);
-    AES_CMAC(&cmac_key, inbuff+0x60, 0x30 + chk_size + header->data_offset, cmac_data_hash);
-  
-    if(memcmp(cmac_header_hash, header->CMAC_header_hash, 16) != 0) return KIRK_HEADER_HASH_INVALID;
-    if(memcmp(cmac_data_hash, header->CMAC_data_hash, 16) != 0) return KIRK_DATA_HASH_INVALID;
-  
-    return KIRK_OPERATION_SUCCESS;
-  }    
-  return KIRK_SIG_CHECK_INVALID; //Checks for cmd 2 & 3 not included right now
 }
 
-int kirk_CMD11(u8* outbuff, u8* inbuff, int size)
+
+int kirk_CMD7(u8* outbuff, u8* inbuff)
 {
-  KIRK_SHA1_HEADER *header = (KIRK_SHA1_HEADER *)inbuff;
-  SHA_CTX sha;
-  if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
-  if(header->data_size == 0 || size == 0) return KIRK_DATA_SIZE_ZERO;
-  
-	SHAInit(&sha);
-	SHAUpdate(&sha, inbuff+sizeof(KIRK_SHA1_HEADER), header->data_size);
-	SHAFinal(outbuff, &sha);
-  return KIRK_OPERATION_SUCCESS;
+    KIRK_AES128CBC_HEADER *header = (KIRK_AES128CBC_HEADER*)inbuff;
+    u8* key;
+    AES_ctx aesKey;
+
+    if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+    if(header->mode != KIRK_MODE_DECRYPT_CBC) return KIRK_INVALID_MODE;
+    if(header->data_size == 0) return KIRK_DATA_SIZE_ZERO;
+
+    key = kirk_4_7_get_key(header->keyseed);
+    if(key == (u8*)KIRK_INVALID_SIZE) return KIRK_INVALID_SIZE;
+
+    //Set the key
+    AES_set_key(&aesKey, key, 128);
+    AES_cbc_decrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_HEADER), outbuff, header->data_size);
+
+    return KIRK_OPERATION_SUCCESS;
+}
+
+int kirk_CMD8(u8* outbuff, u8* inbuff)
+{
+    KIRK_AES128CBC_HEADER *header = (KIRK_AES128CBC_HEADER*)inbuff;
+    u8 key[0x10];
+    AES_ctx aesKey;
+
+    if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+    if(header->mode != KIRK_MODE_DECRYPT_CBC) return KIRK_INVALID_MODE;
+    if(header->keyseed != 0x100) return KIRK_INVALID_MODE;
+    if(header->data_size == 0) return KIRK_DATA_SIZE_ZERO;
+
+    generate_key_from_mesh(key,1);
+    //hex_dump("key8", key,0x10);
+    //Set the key
+    AES_set_key(&aesKey, key, 128);
+    AES_cbc_decrypt(&aesKey, inbuff+sizeof(KIRK_AES128CBC_HEADER), outbuff, header->data_size);
+
+    return KIRK_OPERATION_SUCCESS;
+}
+
+int kirk_CMD9(u8* outbuff, u8* inbuff)
+{
+    KIRK_AES128CBC_USER_HEADER *header = (KIRK_AES128CBC_USER_HEADER*)inbuff;
+    u8 key[0x10];
+    u8 keyseed[0x10];
+    u8 userkey[0x10];
+
+    AES_ctx aesKey;
+
+    if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+    if(header->mode != KIRK_MODE_DECRYPT_CBC) return KIRK_INVALID_MODE;
+    if(header->keyseed != 0x200) return KIRK_INVALID_MODE;
+    if(header->data_size == 0) return KIRK_DATA_SIZE_ZERO;
+
+    generate_key_from_mesh(key,2);
+    memcpy(userkey, header->userkey, 0x10);
+    //Set the key
+    AES_set_key(&aesKey, key, 128);
+    memcpy(keyseed,inbuff+sizeof(KIRK_AES128CBC_USER_HEADER), 0x10);
+    AES_decrypt(&aesKey, keyseed,keyseed);
+    AES_set_key(&aesKey, userkey, 128);
+    AES_encrypt(&aesKey, keyseed,key);
+    AES_set_key(&aesKey, key,128);
+
+    //Set the key
+    AES_set_key(&aesKey, key, 128);
+    AES_cbc_decrypt(&aesKey, inbuff+0x34, outbuff, header->data_size);
+
+    return KIRK_OPERATION_SUCCESS;
+}
+
+
+int kirk_CMD10(u8* inbuff)
+{
+    KIRK_CMD1_HEADER* header = (KIRK_CMD1_HEADER*)inbuff;
+    header_keys keys; //0-15 AES key, 16-31 CMAC key
+    u8 cmac_header_hash[16];
+    u8 cmac_data_hash[16];
+    AES_ctx cmac_key;
+    AES_ctx gen0;
+    int chk_size;
+
+    if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+    if(!(header->mode == KIRK_MODE_CMD1 || header->mode == KIRK_MODE_CMD2 || header->mode == KIRK_MODE_CMD3)) return KIRK_INVALID_MODE;
+    if(header->data_size == 0) return KIRK_DATA_SIZE_ZERO;
+
+    if(header->mode == KIRK_MODE_CMD1)
+    {
+        AES_cbc_decrypt(&aes_kirk1, inbuff, (u8*)&keys, 32); //decrypt AES & CMAC key to temp buffer
+        AES_set_key(&cmac_key, keys.CMAC, 128);
+        AES_CMAC(&cmac_key, inbuff+0x60, 0x30, cmac_header_hash);
+
+        //Make sure data is 16 aligned
+        chk_size = header->data_size;
+        if(chk_size % 16) chk_size += 16 - (chk_size % 16);
+        AES_CMAC(&cmac_key, inbuff+0x60, 0x30 + chk_size + header->data_offset, cmac_data_hash);
+
+        if(memcmp(cmac_header_hash, header->CMAC_header_hash, 16) != 0) return KIRK_HEADER_HASH_INVALID;
+        if(memcmp(cmac_data_hash, header->CMAC_data_hash, 16) != 0) return KIRK_DATA_HASH_INVALID;
+
+        return KIRK_OPERATION_SUCCESS;
+    }
+
+    if(header->mode == KIRK_MODE_CMD3)
+    {
+        u8 genkey[0x10];
+        generate_key_from_mesh(genkey,0);
+        AES_set_key(&gen0, genkey,128);
+        AES_cbc_decrypt(&gen0, inbuff, (u8*)&keys, 32); //decrypt AES & CMAC key to temp buffer
+        AES_set_key(&cmac_key, keys.CMAC, 128);
+        AES_CMAC(&cmac_key, inbuff+0x60, 0x30, cmac_header_hash);
+
+        //Make sure data is 16 aligned
+        chk_size = header->data_size;
+        if(chk_size % 16) chk_size += 16 - (chk_size % 16);
+        AES_CMAC(&cmac_key, inbuff+0x60, 0x30 + chk_size + header->data_offset, cmac_data_hash);
+
+        if(memcmp(cmac_header_hash, header->CMAC_header_hash, 16) != 0) return KIRK_HEADER_HASH_INVALID;
+        if(memcmp(cmac_data_hash, header->CMAC_data_hash, 16) != 0) return KIRK_DATA_HASH_INVALID;
+
+        return KIRK_OPERATION_SUCCESS;
+    }    
+    return KIRK_SIG_CHECK_INVALID; //Checks for cmd 2 & 3 not included right now
+}
+
+int kirk_CMD11(u8* outbuff, u8* inbuff)
+{
+    KIRK_SHA1_HEADER *header = (KIRK_SHA1_HEADER *)inbuff;
+    SHA_CTX sha;
+    if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
+    if(header->data_size == 0 ) return KIRK_DATA_SIZE_ZERO;
+
+    SHAInit(&sha);
+    SHAUpdate(&sha, inbuff+sizeof(KIRK_SHA1_HEADER), header->data_size);
+    SHAFinal(outbuff, &sha);
+    return KIRK_OPERATION_SUCCESS;
 }
 
 // Generate an ECDSA Key pair
 // offset 0 = private key (0x14 len)
 // offset 0x14 = public key point (0x28 len)
-int kirk_CMD12(u8 * outbuff, int outsize) {
-  u8 k[0x15];
-  KIRK_CMD12_BUFFER * keypair = (KIRK_CMD12_BUFFER *) outbuff;
+int kirk_CMD12(u8 * outbuff) {
+    u8 k[0x15];
+    KIRK_CMD12_BUFFER * keypair = (KIRK_CMD12_BUFFER *) outbuff;
 
-  if(outsize != 0x3C) return KIRK_INVALID_SIZE;
-  ecdsa_set_curve(ec_p,ec_a,ec_b2,ec_N2,Gx2,Gy2);
-  k[0] = 0;
-  kirk_CMD14(k+1,0x14);
-  ec_priv_to_pub(k, (u8*)keypair->public_key.x);
-  memcpy(keypair->private_key,k+1,0x14);
-  
-  return KIRK_OPERATION_SUCCESS;
+
+    ecdsa_set_curve(ec_p,ec_a,ec_b2,ec_N2,Gx2,Gy2);
+    k[0] = 0;
+    kirk_CMD14(k+1);
+    ec_priv_to_pub(k, (u8*)keypair->public_key.x);
+    memcpy(keypair->private_key,k+1,0x14);
+
+    return KIRK_OPERATION_SUCCESS;
 }
+
 // Point multiplication
 // offset 0 = mulitplication value (0x14 len)
 // offset 0x14 = point to multiply (0x28 len)
-int kirk_CMD13(u8 * outbuff, int outsize,u8 * inbuff, int insize) {
-  u8 k[0x15];
-  KIRK_CMD13_BUFFER * pointmult = (KIRK_CMD13_BUFFER *) inbuff;
-  k[0]=0;
-  if(outsize != 0x28) return KIRK_INVALID_SIZE;
-  if(insize != 0x3C) return KIRK_INVALID_SIZE;
-  ecdsa_set_curve(ec_p,ec_a,ec_b2,ec_N2,Gx2,Gy2);
-  ecdsa_set_pub((u8*)pointmult->public_key.x);
-  memcpy(k+1,pointmult->multiplier,0x14);
-  ec_pub_mult(k, outbuff);
-  return KIRK_OPERATION_SUCCESS;
+int kirk_CMD13(u8 * outbuff,u8 * inbuff) {
+    u8 k[0x15];
+    KIRK_CMD13_BUFFER * pointmult = (KIRK_CMD13_BUFFER *) inbuff;
+    k[0]=0;
+
+    ecdsa_set_curve(ec_p,ec_a,ec_b2,ec_N2,Gx2,Gy2);
+    ecdsa_set_pub((u8*)pointmult->public_key.x);
+    memcpy(k+1,pointmult->multiplier,0x14);
+    ec_pub_mult(k, outbuff);
+    return KIRK_OPERATION_SUCCESS;
 }
 
-int kirk_CMD14(u8 * outbuff, int outsize) {
-  u8 temp[0x104];
-  KIRK_SHA1_HEADER *header = (KIRK_SHA1_HEADER *) temp;
-  
-  // Some randomly selected data for a "key" to add to each randomization
-  u8 key[0x10] = { 0xA7, 0x2E, 0x4C, 0xB6, 0xC3, 0x34, 0xDF, 0x85, 0x70, 0x01, 0x49, 0xFC, 0xC0, 0x87, 0xC4, 0x77 };
-  u32 curtime;
-  //if(outsize != 0x14) return KIRK_INVALID_SIZE; // Need real error code
-  if(outsize <=0) return KIRK_OPERATION_SUCCESS;
-    
-  memcpy(temp+4, PRNG_DATA,0x14);
-  // This uses the standard C time function for portability.
-  curtime=(u32)time(0);
-  temp[0x18] = curtime &0xFF;
-  temp[0x19] = (curtime>>8) &0xFF;
-  temp[0x1A] = (curtime>>16) &0xFF;
-  temp[0x1B] = (curtime>>24) &0xFF;
-  memcpy(&temp[0x1C], key, 0x10);
-  //This leaves the remainder of the 0x100 bytes in temp to whatever remains on the stack 
-  // in an uninitialized state. This should add unpredicableness to the results as well
-  header->data_size=0x100;
-  kirk_CMD11(PRNG_DATA, temp, 0x104);
-  while(outsize)
-  {
-    int blockrem= outsize %0x14;
-    int block = outsize /0x14;
-    
-    if(block)
-    {
-      memcpy(outbuff, PRNG_DATA, 0x14);
-      outbuff+=0x14;
-      outsize -= 0x14;
-      kirk_CMD14(outbuff, outsize);
-    } else {
-      if(blockrem)
-      {
-        memcpy(outbuff, PRNG_DATA, blockrem);
-        outsize -= blockrem;
-      }
-    }
-    
-  }
-  return KIRK_OPERATION_SUCCESS;
+int kirk_CMD14(u8 * outbuff) {
+    u8 temp[0x104];
+    KIRK_SHA1_HEADER *header = (KIRK_SHA1_HEADER *) temp;
+
+    // Some randomly selected data for a "key" to add to each randomization
+    u8 key[0x10] = { 0xA7, 0x2E, 0x4C, 0xB6, 0xC3, 0x34, 0xDF, 0x85, 0x70, 0x01, 0x49, 0xFC, 0xC0, 0x87, 0xC4, 0x77 };
+    u32 curtime;
+
+
+    memcpy(temp+4, PRNG_DATA,0x14);
+    // This uses the standard C time function for portability.
+    curtime=(u32)time(0);
+    temp[0x18] = curtime &0xFF;
+    temp[0x19] = (curtime>>8) &0xFF;
+    temp[0x1A] = (curtime>>16) &0xFF;
+    temp[0x1B] = (curtime>>24) &0xFF;
+    memcpy(&temp[0x1C], key, 0x10);
+    //This leaves the remainder of the 0x100 bytes in temp to whatever remains on the stack 
+    // in an uninitialized state. This should add unpredicableness to the results as well
+    header->data_size=0x100;
+    kirk_CMD11(PRNG_DATA, temp);
+    memcpy(outbuff, PRNG_DATA, 0x14);
+    return KIRK_OPERATION_SUCCESS;
 }
 
 void generate_key_from_mesh(u8 * key, int param)
@@ -725,7 +750,7 @@ void generate_key_from_mesh(u8 * key, int param)
     memset(genkey,0,0x10);
     int rounds = (param >> 1) +1;
     memcpy(genkey,&g_mesh[(param&1) * 0x10], 0x10);
-    //hex_dump("genkey", genkey,0x10);
+
     AES_set_key(&aes_ctx, &g_mesh[0x20], 128);
     for (i = 0; i < rounds; i++)
     {
@@ -739,102 +764,100 @@ void generate_key_from_mesh(u8 * key, int param)
 void decrypt_kirk16_private(u8 *dA_out, u8 *dA_enc)
 {
 
-  u8 genkey[0x10];
-  AES_ctx aes_ctx;
+    u8 genkey[0x10];
+    AES_ctx aes_ctx;
 
-  /* set the key to the mesh */
-  generate_key_from_mesh(genkey,3);
- 
-  /* set the key to that mesh shit */
-  AES_set_key(&aes_ctx, genkey, 128);
- 
-  /* cbc decrypt the dA */
-  AES_cbc_decrypt(&aes_ctx, dA_enc, dA_out, 0x20);
+    /* set the key to the mesh */
+    generate_key_from_mesh(genkey,3);
+
+    /* set the key to that mesh shit */
+    AES_set_key(&aes_ctx, genkey, 128);
+
+    /* cbc decrypt the dA */
+    AES_cbc_decrypt(&aes_ctx, dA_enc, dA_out, 0x20);
 }
 
 void init_mesh()
 {
-  u8 fuseid[8];
-  int i, k;
-  u8 subkey_1[0x10], subkey_2[0x10];
-  AES_ctx aes_ctx;
-  memset(g_mesh,0,0x40);
-  
-  fuseid[7] = g_fuse90 &0xFF;
-  fuseid[6] = (g_fuse90>>8) &0xFF;
-  fuseid[5] = (g_fuse90>>16) &0xFF;
-  fuseid[4] = (g_fuse90>>24) &0xFF; 
-  fuseid[3] = g_fuse94 &0xFF;
-  fuseid[2] = (g_fuse94>>8) &0xFF;
-  fuseid[1] = (g_fuse94>>16) &0xFF;
-  fuseid[0] = (g_fuse94>>24) &0xFF;
-  /* set encryption key */
-  AES_set_key(&aes_ctx, MASTER_KEY, 128);  
- 
-  /* set the subkeys */
-  for (i = 0; i < 0x10; i++)
-  {
-    /* set to the fuseid */
-    subkey_2[i] = subkey_1[i] = fuseid[i % 8];
-  }
- 
-  /* do aes crypto */
-  for (i = 0; i < 3; i++)
-  {
-    /* encrypt + decrypt */
-    AES_encrypt(&aes_ctx, subkey_1, subkey_1);
-    AES_decrypt(&aes_ctx, subkey_2, subkey_2);
-  }
- 
-  /* set new key */
-  AES_set_key(&aes_ctx, subkey_1, 128);
- 
-  /* now lets make the key mesh */
-  for (i = 0; i < 3; i++)
-  {
-    /* do encryption in group of 3 */
-    for (k = 0; k < 3; k++)
+    u8 fuseid[8];
+    int i, k;
+    u8 subkey_1[0x10], subkey_2[0x10];
+    AES_ctx aes_ctx;
+    memset(g_mesh,0,0x40);
+
+    fuseid[7] = g_fuse90 &0xFF;
+    fuseid[6] = (g_fuse90>>8) &0xFF;
+    fuseid[5] = (g_fuse90>>16) &0xFF;
+    fuseid[4] = (g_fuse90>>24) &0xFF; 
+    fuseid[3] = g_fuse94 &0xFF;
+    fuseid[2] = (g_fuse94>>8) &0xFF;
+    fuseid[1] = (g_fuse94>>16) &0xFF;
+    fuseid[0] = (g_fuse94>>24) &0xFF;
+    /* set encryption key */
+    AES_set_key(&aes_ctx, MASTER_KEY, 128);  
+
+    /* set the subkeys */
+    for (i = 0; i < 0x10; i++)
     {
-      /* crypto */
-      AES_encrypt(&aes_ctx, subkey_2, subkey_2);
+        /* set to the fuseid */
+        subkey_2[i] = subkey_1[i] = fuseid[i % 8];
     }
- 
-    /* copy to out block */
-    memcpy(&g_mesh[i * 0x10], subkey_2, 0x10);
-  }
-  //hex_dump("Mesh", g_mesh,0x30);  
-      
+
+    /* do aes crypto */
+    for (i = 0; i < 3; i++)
+    {
+        /* encrypt + decrypt */
+        AES_encrypt(&aes_ctx, subkey_1, subkey_1);
+        AES_decrypt(&aes_ctx, subkey_2, subkey_2);
+    }
+
+    /* set new key */
+    AES_set_key(&aes_ctx, subkey_1, 128);
+
+    /* now lets make the key mesh */
+    for (i = 0; i < 3; i++)
+    {
+        /* do encryption in group of 3 */
+        for (k = 0; k < 3; k++)
+        {
+            /* crypto */
+            AES_encrypt(&aes_ctx, subkey_2, subkey_2);
+        }
+
+        /* copy to out block */
+        memcpy(&g_mesh[i * 0x10], subkey_2, 0x10);
+    }
+    
 }
  
 void encrypt_kirk16_private(u8 *dA_out, u8 *dA_dec)
 {
 
-  u8 genkey[0x10];
-  AES_ctx aes_ctx;
+    u8 genkey[0x10];
+    AES_ctx aes_ctx;
 
-  /* set the key to the mesh */
-  generate_key_from_mesh(genkey,3);
- 
-  /* set the key to that mesh shit */
-  AES_set_key(&aes_ctx, genkey, 128);
+    /* set the key to the mesh */
+    generate_key_from_mesh(genkey,3);
 
-  /* cbc encrypt the dA */
-  AES_cbc_encrypt(&aes_ctx, dA_dec, dA_out, 0x20);
+    /* set the key to that mesh shit */
+    AES_set_key(&aes_ctx, genkey, 128);
+
+    /* cbc encrypt the dA */
+    AES_cbc_encrypt(&aes_ctx, dA_dec, dA_out, 0x20);
 }
 
-int kirk_CMD16(u8 * outbuff, int outsize, u8 * inbuff, int insize) {
-	u8 dec_private[0x20];
-	KIRK_CMD16_BUFFER * signbuf = (KIRK_CMD16_BUFFER *) inbuff;
-	ECDSA_SIG * sig = (ECDSA_SIG *) outbuff;
-	if(insize != 0x34) return KIRK_INVALID_SIZE;
-	if(outsize != 0x28) return KIRK_INVALID_SIZE;
-	decrypt_kirk16_private(dec_private,signbuf->enc_private);
-	// Clear out the padding for safety
-	memset(&dec_private[0x14], 0, 0xC);
-	ecdsa_set_curve(ec_p,ec_a,ec_b2,ec_N2,Gx2,Gy2);
-	ecdsa_set_priv(dec_private);
-	ecdsa_sign(signbuf->message_hash,sig->r, sig->s);
-  return KIRK_OPERATION_SUCCESS;
+int kirk_CMD16(u8 * outbuff, u8 * inbuff) {
+    u8 dec_private[0x20];
+    KIRK_CMD16_BUFFER * signbuf = (KIRK_CMD16_BUFFER *) inbuff;
+    ECDSA_SIG * sig = (ECDSA_SIG *) outbuff;
+
+    decrypt_kirk16_private(dec_private,signbuf->enc_private);
+    // Clear out the padding for safety
+    memset(&dec_private[0x14], 0, 0xC);
+    ecdsa_set_curve(ec_p,ec_a,ec_b2,ec_N2,Gx2,Gy2);
+    ecdsa_set_priv(dec_private);
+    ecdsa_sign(signbuf->message_hash,sig->r, sig->s);
+    return KIRK_OPERATION_SUCCESS;
 }
 
 // ECDSA Verify
@@ -843,28 +866,30 @@ int kirk_CMD16(u8 * outbuff, int outsize, u8 * inbuff, int insize) {
 // 28 = message hash (0x14 length)
 // 3C = signature R (0x14 length)
 // 50 = signature S (0x14 length)
-int kirk_CMD17(u8 * inbuff, int insize) {
-	KIRK_CMD17_BUFFER * sig = (KIRK_CMD17_BUFFER *) inbuff;
-  if(insize != 0x64) return KIRK_INVALID_SIZE;
-  ecdsa_set_curve(ec_p,ec_a,ec_b2,ec_N2,Gx2,Gy2);
-  ecdsa_set_pub(sig->public_key.x);
-  // ecdsa_verify(u8 *hash, u8 *R, u8 *S)
-  if(ecdsa_verify(sig->message_hash,sig->signature.r,sig->signature.s)) {
-    return KIRK_OPERATION_SUCCESS;
-  } else {
-    return KIRK_SIG_CHECK_INVALID;
-  }
+int kirk_CMD17(u8 * inbuff) {
+    KIRK_CMD17_BUFFER * sig = (KIRK_CMD17_BUFFER *) inbuff;
+    ecdsa_set_curve(ec_p,ec_a,ec_b2,ec_N2,Gx2,Gy2);
+    ecdsa_set_pub(sig->public_key.x);
+    // ecdsa_verify(u8 *hash, u8 *R, u8 *S)
+    if(ecdsa_verify(sig->message_hash,sig->signature.r,sig->signature.s))
+    {
+        return KIRK_OPERATION_SUCCESS;
+    }
+    else
+    {
+        return KIRK_SIG_CHECK_INVALID;
+    }
 }
 
 
-int kirk_CMD18(u8 * inbuff, int insize)
+int kirk_CMD18(u8 * inbuff)
 {
     u8 cmac_hash[0x10];
     u8 key[0x10];
     AES_ctx cmackey;
-    
+
     if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
-    if(insize != 0xb8) return KIRK_INVALID_SIZE;
+    //if(insize != 0xb8) return KIRK_INVALID_SIZE;
             
     generate_key_from_mesh(key,4);
     AES_set_key(&cmackey, key,128);
@@ -876,83 +901,84 @@ int kirk_CMD18(u8 * inbuff, int insize)
 
 int kirk_init()
 {
-  return kirk_init2((u8*)"Lazy Dev should have initialized!",33,0xBABEF00D, 0xDEADBEEF );;
+    return kirk_init2((u8*)"Lazy Dev should have initialized!",33,0xBABEF00D, 0xDEADBEEF );;
 }
 
 int kirk_init2(u8 * rnd_seed, u32 seed_size, u32 fuseid_90, u32 fuseid_94) {
-  u8 temp[0x104];
-  
-  KIRK_SHA1_HEADER *header = (KIRK_SHA1_HEADER *) temp;
-  // Another randomly selected data for a "key" to add to each randomization
-  u8 key[0x10] = {0x07, 0xAB, 0xEF, 0xF8, 0x96, 0x8C, 0xF3, 0xD6, 0x14, 0xE0, 0xEB, 0xB2, 0x9D, 0x8B, 0x4E, 0x74};
-  u32 curtime;
+    u8 temp[0x104];
 
-  //Set PRNG_DATA initially, otherwise use what ever uninitialized data is in the buffer
-  if(seed_size > 0) {
-    u8 * seedbuf;
-    KIRK_SHA1_HEADER *seedheader;;
-    seedbuf=(u8*)malloc(seed_size+4);
-    seedheader= (KIRK_SHA1_HEADER *) seedbuf;
-    seedheader->data_size = seed_size;
-    kirk_CMD11(PRNG_DATA, seedbuf, seed_size+4);    
-    free(seedbuf);
-  }
-  memcpy(temp+4, PRNG_DATA,0x14);
-  // This uses the standard C time function for portability.
-  curtime=(u32)time(0);
-  temp[0x18] = curtime &0xFF;
-  temp[0x19] = (curtime>>8) &0xFF;
-  temp[0x1A] = (curtime>>16) &0xFF;
-  temp[0x1B] = (curtime>>24) &0xFF;
-  memcpy(&temp[0x1C], key, 0x10);
-  //This leaves the remainder of the 0x100 bytes in temp to whatever remains on the stack 
-  // in an uninitialized state. This should add unpredicableness to the results as well
-  header->data_size=0x100;
-  kirk_CMD11(PRNG_DATA, temp, 0x104); 
-  
-  //Set Fuse ID
-  g_fuse90=fuseid_90;
-  g_fuse94=fuseid_94;
-  init_mesh();
-  //Set KIRK1 main key
-  AES_set_key(&aes_kirk1, keyvault[2], 128);
-  
+    KIRK_SHA1_HEADER *header = (KIRK_SHA1_HEADER *) temp;
+    // Another randomly selected data for a "key" to add to each randomization
+    u8 key[0x10] = {0x07, 0xAB, 0xEF, 0xF8, 0x96, 0x8C, 0xF3, 0xD6, 0x14, 0xE0, 0xEB, 0xB2, 0x9D, 0x8B, 0x4E, 0x74};
+    u32 curtime;
 
-  is_kirk_initialized = 1;
-  return 0;
+    //Set PRNG_DATA initially, otherwise use what ever uninitialized data is in the buffer
+    if(seed_size > 0)
+    {
+        u8 * seedbuf;
+        KIRK_SHA1_HEADER *seedheader;;
+        seedbuf=(u8*)malloc(seed_size+4);
+        seedheader= (KIRK_SHA1_HEADER *) seedbuf;
+        seedheader->data_size = seed_size;
+        kirk_CMD11(PRNG_DATA, seedbuf);    
+        free(seedbuf);
+    }
+    memcpy(temp+4, PRNG_DATA,0x14);
+    // This uses the standard C time function for portability.
+    curtime=(u32)time(0);
+    temp[0x18] = curtime &0xFF;
+    temp[0x19] = (curtime>>8) &0xFF;
+    temp[0x1A] = (curtime>>16) &0xFF;
+    temp[0x1B] = (curtime>>24) &0xFF;
+    memcpy(&temp[0x1C], key, 0x10);
+    //This leaves the remainder of the 0x100 bytes in temp to whatever remains on the stack 
+    // in an uninitialized state. This should add unpredicableness to the results as well
+    header->data_size=0x100;
+    kirk_CMD11(PRNG_DATA, temp); 
+
+    //Set Fuse ID
+    g_fuse90=fuseid_90;
+    g_fuse94=fuseid_94;
+    init_mesh();
+    //Set KIRK1 main key
+    AES_set_key(&aes_kirk1, keyvault[2], 128);
+
+
+    is_kirk_initialized = 1;
+    return 0;
 }
 u8* kirk_4_7_get_key(int key_type)
 {
-	if((key_type < 0) || (key_type >=0x80)) return (u8*)KIRK_INVALID_SIZE;
+    if((key_type < 0) || (key_type >=0x80)) return (u8*)KIRK_INVALID_SIZE;
 
-	return keyvault[key_type+4];
+    return keyvault[key_type+4];
 }
 
 
 int sceUtilsBufferCopyWithRange(u8* outbuff, int outsize, u8* inbuff, int insize, int cmd)
 {
-  switch(cmd)
-  {
-    case KIRK_CMD_0_DEVKIT_DECRYPT:     return kirk_CMD0(outbuff, inbuff, insize); break;
-    case KIRK_CMD_1_DECRYPT_VERIFY:     return kirk_CMD1(outbuff, inbuff, insize); break;
-    case KIRK_CMD_3_DECRYPT_VERIFY:     return kirk_CMD3(outbuff, inbuff, insize); break;
-    case KIRK_CMD_ENCRYPT_IV_0:         return kirk_CMD4(outbuff, inbuff, insize); break;
-    case KIRK_CMD_DECRYPT_IV_0:         return kirk_CMD7(outbuff, inbuff, insize); break;
-    case KIRK_CMD_ENCRYPT_IV_FUSE:      return kirk_CMD5(outbuff, inbuff, insize); break;
-    case KIRK_CMD_DECRYPT_IV_FUSE:      return kirk_CMD8(outbuff, inbuff, insize); break;
-    case KIRK_CMD_ENCRYPT_IV_USER:      return kirk_CMD6(outbuff, inbuff, insize); break;
-    case KIRK_CMD_DECRYPT_IV_USER:      return kirk_CMD9(outbuff, inbuff, insize); break;        
-    case KIRK_CMD_PRIV_SIGN_CHECK:      return kirk_CMD10(inbuff, insize); break;
-    case KIRK_CMD_SHA1_HASH:            return kirk_CMD11(outbuff, inbuff, insize); break;
-    case KIRK_CMD_ECDSA_GEN_KEYS:       return kirk_CMD12(outbuff,outsize); break;
-    case KIRK_CMD_ECDSA_MULTIPLY_POINT: return kirk_CMD13(outbuff,outsize, inbuff, insize); break;
-    case KIRK_CMD_PRNG:                 return kirk_CMD14(outbuff,outsize); break;
-    case KIRK_CMD_ECDSA_SIGN:           return kirk_CMD16(outbuff, outsize, inbuff, insize); break;
-    case KIRK_CMD_ECDSA_VERIFY:         return kirk_CMD17(inbuff, insize); break;   
-    case KIRK_CMD_CERT_VERIFY:          return kirk_CMD18(inbuff, insize); break;     
-    // Custom functions to help
-    case KIRK_CMD_1_ENCRYPT:            return kirk_CMD1ENC(outbuff, inbuff, insize,1); break;
-    case KIRK_CMD_3_ENCRYPT:            return kirk_CMD3ENC(outbuff, inbuff, insize,1); break;        
-  }
-  return -1;
+    switch(cmd)
+    {
+        case KIRK_CMD_0_DEVKIT_DECRYPT:     return kirk_CMD0(outbuff, inbuff); break;
+        case KIRK_CMD_1_DECRYPT_VERIFY:     return kirk_CMD1(outbuff, inbuff); break;
+        case KIRK_CMD_3_DECRYPT_VERIFY:     return kirk_CMD3(outbuff, inbuff); break;
+        case KIRK_CMD_ENCRYPT_IV_0:         return kirk_CMD4(outbuff, inbuff); break;
+        case KIRK_CMD_DECRYPT_IV_0:         return kirk_CMD7(outbuff, inbuff); break;
+        case KIRK_CMD_ENCRYPT_IV_FUSE:      return kirk_CMD5(outbuff, inbuff); break;
+        case KIRK_CMD_DECRYPT_IV_FUSE:      return kirk_CMD8(outbuff, inbuff); break;
+        case KIRK_CMD_ENCRYPT_IV_USER:      return kirk_CMD6(outbuff, inbuff); break;
+        case KIRK_CMD_DECRYPT_IV_USER:      return kirk_CMD9(outbuff, inbuff); break;        
+        case KIRK_CMD_PRIV_SIGN_CHECK:      return kirk_CMD10(inbuff); break;
+        case KIRK_CMD_SHA1_HASH:            return kirk_CMD11(outbuff, inbuff); break;
+        case KIRK_CMD_ECDSA_GEN_KEYS:       return kirk_CMD12(outbuff); break;
+        case KIRK_CMD_ECDSA_MULTIPLY_POINT: return kirk_CMD13(outbuff, inbuff); break;
+        case KIRK_CMD_PRNG:                 return kirk_CMD14(outbuff); break;
+        case KIRK_CMD_ECDSA_SIGN:           return kirk_CMD16(outbuff, inbuff); break;
+        case KIRK_CMD_ECDSA_VERIFY:         return kirk_CMD17(inbuff); break;   
+        case KIRK_CMD_CERT_VERIFY:          return kirk_CMD18(inbuff); break;     
+        // Custom functions to help
+        case KIRK_CMD_1_ENCRYPT:            return kirk_CMD1ENC(outbuff, inbuff, insize,1); break;
+        case KIRK_CMD_3_ENCRYPT:            return kirk_CMD3ENC(outbuff, inbuff, insize,1); break;        
+    }
+    return -1;
 }

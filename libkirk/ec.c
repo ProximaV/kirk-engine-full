@@ -271,7 +271,7 @@ static void generate_ecdsa(u8 *outR, u8 *outS, u8 *k, u8 *hash)
   //  R = (mG).x
   
   // Added call back to kirk PRNG - July 2011
-  kirk_CMD14(m+1, 20);
+  kirk_CMD14(m+1);
   m[0] = 0;
   
   point_mul(&mG, m, &ec_G);

@@ -323,28 +323,29 @@ int kirk_CMD3ENC(u8* outbuff, u8* inbuff, int size, int generate_trash)
 
 int kirk_CMD0(u8* outbuff, u8* inbuff, int size)
 {
-  // Since the KEYS are empty this will not work yet but is structurally correct.
-  KIRK_KBOOTI_HEADER* header = (KIRK_KBOOTI_HEADER*)inbuff;
-  AES_ctx cmackey;
-  AES_ctx bodykey;
-  u8 cmachash[0x10];
-
-  AES_set_key(&cmackey,keyvault[1],128);
-  AES_set_key(&bodykey,keyvault[0],128);
-  AES_CMAC(&cmackey, inbuff+sizeof(KIRK_KBOOTI_HEADER), header->length, cmachash);
-  if(memcmp(cmachash, header->cmac, 16) != 0) return KIRK_NOT_ENABLED; // yeah this is not right, but it does return 1 in this case
-  AES_cbc_decrypt(&bodykey, inbuff+sizeof(KIRK_KBOOTI_HEADER), outbuff, header->length);
-  return KIRK_OPERATION_SUCCESS;
+    
+    // Since the KEYS are empty this will not work yet but is structurally correct.
+    KIRK_KBOOTI_HEADER* header = (KIRK_KBOOTI_HEADER*)inbuff;
+    AES_ctx cmackey;
+    AES_ctx bodykey;
+    u8 cmachash[0x10];
+    
+    AES_set_key(&cmackey,keyvault[1],128);
+    AES_set_key(&bodykey,keyvault[0],128);
+    AES_CMAC(&cmackey, inbuff+sizeof(KIRK_KBOOTI_HEADER), header->length, cmachash);
+    if(memcmp(cmachash, header->cmac, 16) != 0) return KIRK_NOT_ENABLED; // yeah this is not right, but it does return 1 in this case
+    AES_cbc_decrypt(&bodykey, inbuff+sizeof(KIRK_KBOOTI_HEADER), outbuff, header->length);
+    return KIRK_OPERATION_SUCCESS;
+    
 }
 
 int kirk_CMD1(u8* outbuff, u8* inbuff, int size)
 {
-   KIRK_CMD1_HEADER* header = (KIRK_CMD1_HEADER*)inbuff;
+  KIRK_CMD1_HEADER* header = (KIRK_CMD1_HEADER*)inbuff;
   header_keys keys; //0-15 AES key, 16-31 CMAC key
-  int chk_size;
   AES_ctx k1;
-  
-  if(size < 0x90) return KIRK_INVALID_SIZE;
+	
+	if(size < 0x90) return KIRK_INVALID_SIZE;
   if(is_kirk_initialized == 0) return KIRK_NOT_INITIALIZED;
   if(header->mode != KIRK_MODE_CMD1) return KIRK_INVALID_MODE;
   
@@ -352,43 +353,38 @@ int kirk_CMD1(u8* outbuff, u8* inbuff, int size)
   
   if(header->ecdsa_hash == 1)
   {
-    SHA_CTX sha;
-    KIRK_CMD1_ECDSA_HEADER* eheader = (KIRK_CMD1_ECDSA_HEADER*) inbuff;
-    u8 kirk1_pub[40];
-    u8 header_hash[20];u8 data_hash[20];
-    ecdsa_set_curve(ec_p,ec_a,ec_b1,ec_N1,Gx1,Gy1);
-    memcpy(kirk1_pub,Px1,20);
-    memcpy(kirk1_pub+20,Py1,20);
-    ecdsa_set_pub(kirk1_pub);
-    
-    //Make sure data is 16 aligned
-    chk_size = eheader->data_size;
-    if (chk_size % 16) chk_size += 16 - (chk_size % 16);
-    
-    //Hash the Header
-    SHAInit(&sha);
-    SHAUpdate(&sha, (u8*)eheader+0x60, 0x30);
-    SHAFinal(header_hash, &sha);
-    
-    if(!ecdsa_verify(header_hash,eheader->header_sig_r,eheader->header_sig_s)) {
-      return KIRK_HEADER_HASH_INVALID;
-    }
-    
-    //Hash the Data
-    SHAInit(&sha);
-    SHAUpdate(&sha, (u8*)eheader+0x60, 0x30 + chk_size + header->data_offset);
-    SHAFinal(data_hash, &sha);
-    
-    if(!ecdsa_verify(data_hash,eheader->data_sig_r,eheader->data_sig_s)) {
-      return KIRK_DATA_HASH_INVALID;
-    }
+  	SHA_CTX sha;
+  	KIRK_CMD1_ECDSA_HEADER* eheader = (KIRK_CMD1_ECDSA_HEADER*) inbuff;
+  	u8 kirk1_pub[40];
+  	u8 header_hash[20];u8 data_hash[20];
+  	ecdsa_set_curve(ec_p,ec_a,ec_b1,ec_N1,Gx1,Gy1);
+  	memcpy(kirk1_pub,Px1,20);
+  	memcpy(kirk1_pub+20,Py1,20);
+  	ecdsa_set_pub(kirk1_pub);
+		//Hash the Header
+		SHAInit(&sha);
+		SHAUpdate(&sha, (u8*)eheader+0x60, 0x30);
+		SHAFinal(header_hash, &sha);		
+		
+	  if(!ecdsa_verify(header_hash,eheader->header_sig_r,eheader->header_sig_s)) {
+	    return KIRK_HEADER_HASH_INVALID;
+	  }
+	  SHAInit(&sha);
+		SHAUpdate(&sha, (u8*)eheader+0x60, size-0x60);
+		SHAFinal(data_hash, &sha);  
+		
+	  if(!ecdsa_verify(data_hash,eheader->data_sig_r,eheader->data_sig_s)) {
+	    return KIRK_DATA_HASH_INVALID;
+	  }
+
   } else  {
-      int ret = kirk_CMD10(inbuff, size);
-      if(ret != KIRK_OPERATION_SUCCESS) return ret;
+    int ret = kirk_CMD10(inbuff, size);
+    if(ret != KIRK_OPERATION_SUCCESS) return ret;
   }
   
   AES_set_key(&k1, keys.AES, 128);
   AES_cbc_decrypt(&k1, inbuff+sizeof(KIRK_CMD1_HEADER)+header->data_offset, outbuff, header->data_size);  
+  
   return KIRK_OPERATION_SUCCESS;
 }
 

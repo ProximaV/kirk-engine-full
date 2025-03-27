@@ -32,6 +32,7 @@
 #include <string.h>
 #include <time.h>
 #include "kirk_engine.h"
+#include "ecdsa.h"
 #include "AES.h"
 #include "SHA1.h"
 
@@ -692,7 +693,6 @@ int kirk_CMD12(u8 * outbuff) {
     u8 k[0x15];
     KIRK_CMD12_BUFFER * keypair = (KIRK_CMD12_BUFFER *) outbuff;
 
-
     ecdsa_set_curve(ec_p,ec_a,ec_b2,ec_N2,Gx2,Gy2);
     k[0] = 0;
     kirk_CMD14(k+1);
@@ -724,7 +724,6 @@ int kirk_CMD14(u8 * outbuff) {
     // Some randomly selected data for a "key" to add to each randomization
     u8 key[0x10] = { 0xA7, 0x2E, 0x4C, 0xB6, 0xC3, 0x34, 0xDF, 0x85, 0x70, 0x01, 0x49, 0xFC, 0xC0, 0x87, 0xC4, 0x77 };
     u32 curtime;
-
 
     memcpy(temp+4, PRNG_DATA,0x14);
     // This uses the standard C time function for portability.
@@ -763,7 +762,6 @@ void generate_key_from_mesh(u8 * key, int param)
 
 void decrypt_kirk16_private(u8 *dA_out, u8 *dA_enc)
 {
-
     u8 genkey[0x10];
     AES_ctx aes_ctx;
 
@@ -827,12 +825,10 @@ void init_mesh()
         /* copy to out block */
         memcpy(&g_mesh[i * 0x10], subkey_2, 0x10);
     }
-    
 }
  
 void encrypt_kirk16_private(u8 *dA_out, u8 *dA_dec)
 {
-
     u8 genkey[0x10];
     AES_ctx aes_ctx;
 
@@ -881,7 +877,6 @@ int kirk_CMD17(u8 * inbuff) {
     }
 }
 
-
 int kirk_CMD18(u8 * inbuff)
 {
     u8 cmac_hash[0x10];
@@ -896,7 +891,6 @@ int kirk_CMD18(u8 * inbuff)
     AES_CMAC(&cmackey, inbuff, 0xA8, cmac_hash);
     if(memcmp(cmac_hash, inbuff+0xA8, 16) != 0) return KIRK_SIG_CHECK_INVALID;
     return KIRK_OPERATION_SUCCESS;
-
 }
 
 int kirk_init()
@@ -916,12 +910,12 @@ int kirk_init2(u8 * rnd_seed, u32 seed_size, u32 fuseid_90, u32 fuseid_94) {
     if(seed_size > 0)
     {
         u8 * seedbuf;
-        KIRK_SHA1_HEADER *seedheader;;
+        KIRK_SHA1_HEADER *seedheader;
         seedbuf=(u8*)malloc(seed_size+4);
         memcpy(seedbuf+4, rnd_seed, seed_size);
         seedheader= (KIRK_SHA1_HEADER *) seedbuf;
         seedheader->data_size = seed_size;
-        kirk_CMD11(PRNG_DATA, seedbuf);    
+        kirk_CMD11(PRNG_DATA, seedbuf);
         free(seedbuf);
     }
     memcpy(temp+4, PRNG_DATA,0x14);
@@ -944,7 +938,6 @@ int kirk_init2(u8 * rnd_seed, u32 seed_size, u32 fuseid_90, u32 fuseid_94) {
     //Set KIRK1 main key
     AES_set_key(&aes_kirk1, keyvault[2], 128);
 
-
     is_kirk_initialized = 1;
     return 0;
 }
@@ -955,6 +948,21 @@ u8* kirk_4_7_get_key(int key_type)
     return keyvault[key_type+4];
 }
 
+void hex_dump(char* str, u8* buf, int size)
+{
+    int i;
+
+    if (str)
+        printf("%s:", str);
+
+    for (i = 0; i < size; i++) {
+        if ((i % 16) == 0) {
+            printf("\n%4X:", i);
+        }
+        printf(" %02X", buf[i]);
+    }
+    printf("\n\n");
+}
 
 int sceUtilsBufferCopyWithRange(u8* outbuff, int outsize, u8* inbuff, int insize, int cmd)
 {

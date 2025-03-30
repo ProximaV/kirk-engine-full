@@ -45,8 +45,6 @@ void AES_cbc_decrypt(AES_ctx *ctx, u8 *src, u8 *dst, int size);
 void AES_CMAC(AES_ctx *ctx, unsigned char *input, int length, unsigned char *mac);
 
 int	rijndaelKeySetupEnc(unsigned int [], const unsigned char [], int);
-int	rijndaelKeySetupDec(unsigned int [], const unsigned char [], int);
-void rijndaelEncrypt(const unsigned int [], int, const unsigned char [],
-	    unsigned char []);
+void rijndaelEncrypt(const unsigned int [], int, const u8 [16], u8 [16]);
 
 #endif /* __RIJNDAEL_H */

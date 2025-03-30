@@ -241,36 +241,14 @@ int kirk_init2(u8 *, u32, u32, u32);
 
 //helper funcs
 u8* kirk_4_7_get_key(int key_type);
-
+void hex_dump(char* str, u8* buf, int size);
 
 //sce-like funcs
-int sceUtilsSetFuseID(u8*fuse);
 int sceUtilsBufferCopyWithRange(u8* outbuff, int outsize, u8* inbuff, int insize, int cmd);
 void decrypt_kirk16_private(u8 *dA_out, u8 *dA_enc);
 void encrypt_kirk16_private(u8 *dA_out, u8 *dA_dec);
 void init_mesh(void);
 void generate_key_from_mesh(u8 * key, int param);
-void secret_keygen( u8 *keyout);
-
-// Prototypes for the Elliptic Curve and Big Number functions
-int ecdsa_get_params(u32 type, u8 *p, u8 *a, u8 *b, u8 *N, u8 *Gx, u8 *Gy);
-int ecdsa_set_curve(u8* p,u8* a,u8* b,u8* N,u8* Gx,u8* Gy);
-void ecdsa_set_pub(u8 *Q);
-void ecdsa_set_priv(u8 *k);
-int ecdsa_verify(u8 *hash, u8 *R, u8 *S);
-void ecdsa_sign(u8 *hash, u8 *R, u8 *S);
-void ec_priv_to_pub(u8 *k, u8 *Q);
-void ec_pub_mult(u8 *k, u8 *Q);
-void bn_copy(u8 *d, u8 *a, u32 n);
-int bn_compare(u8 *a, u8 *b, u32 n);
-void bn_reduce(u8 *d, u8 *N, u32 n);
-void bn_add(u8 *d, u8 *a, u8 *b, u8 *N, u32 n);
-void bn_sub(u8 *d, u8 *a, u8 *b, u8 *N, u32 n);
-void bn_to_mon(u8 *d, u8 *N, u32 n);
-void bn_from_mon(u8 *d, u8 *N, u32 n);
-void bn_mon_mul(u8 *d, u8 *a, u8 *b, u8 *N, u32 n);
-void bn_mon_inv(u8 *d, u8 *a, u8 *N, u32 n);
-void hex_dump(char *str, u8 *buf, int size);
 
 #define		round_up(x,n)	(-(-(x) & -(n)))
 
